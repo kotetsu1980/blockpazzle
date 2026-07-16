@@ -33,7 +33,7 @@
     --c5: #C77DFF; /* オーキッド */
     --c6: #FF9F5B; /* タンジェリン */
 
-    --cell: clamp(28px, 8.6vw, 42px);
+    --cell: clamp(34px, 11.4vw, 56px);
     --gap: 4px;
     --radius: 16px;
   }
@@ -101,13 +101,10 @@
   /* ---------- 盤面 ---------- */
   #board{
     display: grid;
-    grid-template-columns: repeat(9, var(--cell));
-    grid-template-rows: repeat(9, var(--cell));
+    grid-template-columns: repeat(7, var(--cell));
+    grid-template-rows: repeat(7, var(--cell));
     gap: var(--gap);
     background-color: var(--panel);
-    background-size: cover;
-    background-position: center;
-    background-repeat: no-repeat;
     padding: 10px;
     border-radius: var(--radius);
     border: 1px solid var(--cell-border);
@@ -115,7 +112,7 @@
     touch-action: none;
   }
   .cell{
-    background: rgba(38,42,82,.94);
+    background: rgb(38,42,82);
     border-radius: 6px;
     transition: background .12s, transform .12s, box-shadow .12s;
   }
@@ -232,7 +229,7 @@
   }
 
   /* ---------- ゲームオーバー画面 ---------- */
-  #overlay{
+  #overlay, #clearOverlay{
     position: fixed;
     inset: 0;
     background: rgba(10, 11, 26, .82);
@@ -242,7 +239,7 @@
     z-index: 100;
     padding: 20px;
   }
-  #overlay.show{ display: flex; }
+  #overlay.show, #clearOverlay.show{ display: flex; }
   .card{
     background: var(--panel);
     border: 1px solid var(--cell-border);
@@ -267,6 +264,12 @@
     color: var(--muted);
     font-size: 13px;
     margin-bottom: 18px;
+  }
+  .card .clear-bonus{
+    color: var(--ok);
+    font-size: 14px;
+    font-weight: 700;
+    margin: 2px 0 10px;
   }
   .card button{
     background: var(--gold);
@@ -307,14 +310,16 @@
 
   <div class="actions" style="gap:10px;">
     <button class="photo" id="photoBtn">写真を選ぶ</button>
-    <button class="photo" id="voiceBtn">声を追加</button>
+    <button class="photo" id="voiceLineBtn">声1(2列消し)</button>
+    <button class="photo" id="voiceClearBtn">声2(クリア)</button>
     <button class="reset" id="resetBtn">新しいゲーム</button>
     <button class="sound" id="soundBtn">音 ON</button>
   </div>
   <input type="file" id="photoInput" accept="image/*" style="display:none">
-  <input type="file" id="voiceInput" accept="audio/*" style="display:none">
+  <input type="file" id="voiceLineInput" accept="audio/*" style="display:none">
+  <input type="file" id="voiceClearInput" accept="audio/*" style="display:none">
 
-  <p class="help">下のブロックを指でつかんで、盤面にドラッグして置いてね。<br>たて・よこのマスが9マスすべて埋まると、その列が消えてスコアが増えるよ。写真を選んでおくと、列を消した場所からすこしずつ写真が見えてくるよ。「声を追加」でスマホに録音した音声を選ぶと、2列以上いっぺんに消したときに再生されるよ。</p>
+  <p class="help">下のブロックを指でつかんで、盤面にドラッグして置いてね。<br>たて・よこのマスが7マスすべて埋まると、その列が消えてスコアが増えるよ。写真を選んでおくと、消した場所からすこしずつ写真が見えてきて、写真が全部見えたらクリアだよ。クリアまでの手数が少ないほど、ボーナス点がたくさんもらえるよ。<br>「声1」は2列以上いっぺんに消したとき、「声2」はクリアしたときに再生されるよ（それぞれスマホに録音した音声を選んでね）。</p>
 </div>
 
 <div id="dragProxy"></div>
@@ -328,6 +333,16 @@
   </div>
 </div>
 
+<div id="clearOverlay">
+  <div class="card">
+    <h2>クリア!!</h2>
+    <div class="final-score" id="clearScore">0</div>
+    <div class="clear-bonus" id="clearBonusLine">ボーナス: +0点（0手）</div>
+    <div class="final-best" id="clearBest">ベストスコア: 0</div>
+    <button id="clearRetryBtn">もう一度あそぶ</button>
+  </div>
+</div>
+
 <script>
 /* =====================================================================
    ブロックパズル（ブロックブラスト風）ゲーム本体
@@ -337,7 +352,7 @@
    - SHAPES の配列にマスのパターンを足すと新しい形のブロックが増えます
    ===================================================================== */
 
-const GRID = 9;
+const GRID = 7;
 const COLORS = ['var(--c1)','var(--c2)','var(--c3)','var(--c4)','var(--c5)','var(--c6)'];
 
 // ブロックの形一覧。[行,列] のずれ（オフセット）のリストで1つの形を表す
@@ -379,6 +394,8 @@ let score = 0;
 let best = 0;
 let dragState = null;    // ドラッグ中の情報
 let soundOn = true;
+let moveCount = 0;       // ピースを置いた回数（クリアボーナスの計算に使う）
+let gameActive = true;   // false になったらゲームオーバー or クリア済み（それ以上操作できない）
 
 const boardEl = document.getElementById('board');
 const trayEls = [...document.querySelectorAll('.slot')];
@@ -386,42 +403,63 @@ const dragProxy = document.getElementById('dragProxy');
 const scoreValEl = document.getElementById('scoreVal');
 const bestValEl = document.getElementById('bestVal');
 const overlayEl = document.getElementById('overlay');
+const clearOverlayEl = document.getElementById('clearOverlay');
 const photoInput = document.getElementById('photoInput');
 const soundBtn = document.getElementById('soundBtn');
 
 /* 写真を選んでいないときの、盤面のデフォルト背景（夕焼け風グラデーション） */
 const DEFAULT_BG = 'linear-gradient(200deg, #FFD37A 0%, #FF9F5B 32%, #4FA8FF 68%, #7F77DD 100%)';
-boardEl.style.backgroundImage = DEFAULT_BG;
+/* 現在の「隠れている画像」。board自体には貼らず、マスが1つ見える(revealed)たびに
+   そのマスの位置だけ切り出して表示するので、隙間から画像がうっすら透けることがない */
+let currentBg = DEFAULT_BG;
 
 photoInput.addEventListener('change', (e) => {
   const file = e.target.files[0];
   if(!file) return;
   const reader = new FileReader();
   reader.onload = (ev) => {
-    boardEl.style.backgroundImage = `url(${ev.target.result})`;
+    currentBg = `url(${ev.target.result})`;
+    renderBoard();
   };
   reader.readAsDataURL(file);
 });
 document.getElementById('photoBtn').addEventListener('click', () => photoInput.click());
 
-/* ---------------- 録音した音声（例：「アンビリーバボー!!」）を読み込む ---------------- */
-let customVoice = null; // 選んだ音声ファイルの再生用オブジェクト
-const voiceInput = document.getElementById('voiceInput');
-const VOICE_LINE_THRESHOLD = 2; // この数以上のライン同時消しで声が再生される（1にすると毎回鳴る）
+/* ---------------- 録音した音声を読み込む（2種類） ---------------- */
+let voiceLineClear = null; // 2列以上いっぺんに消したときの声
+let voiceClear = null;     // 写真が全部見えてクリアしたときの声
+const voiceLineInput = document.getElementById('voiceLineInput');
+const voiceClearInput = document.getElementById('voiceClearInput');
+const VOICE_LINE_THRESHOLD = 2; // この数以上のライン同時消しで声1が再生される（1にすると毎回鳴る）
 
-voiceInput.addEventListener('change', (e) => {
+voiceLineInput.addEventListener('change', (e) => {
   const file = e.target.files[0];
   if(!file) return;
   const url = URL.createObjectURL(file);
-  customVoice = new Audio(url);
-  customVoice.preload = 'auto';
+  voiceLineClear = new Audio(url);
+  voiceLineClear.preload = 'auto';
 });
-document.getElementById('voiceBtn').addEventListener('click', () => voiceInput.click());
+document.getElementById('voiceLineBtn').addEventListener('click', () => voiceLineInput.click());
 
-function playCustomVoice(){
-  if(!soundOn || !customVoice) return;
-  customVoice.currentTime = 0;
-  customVoice.play().catch(() => {}); // 再生がブロックされても静かに無視する
+voiceClearInput.addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if(!file) return;
+  const url = URL.createObjectURL(file);
+  voiceClear = new Audio(url);
+  voiceClear.preload = 'auto';
+});
+document.getElementById('voiceClearBtn').addEventListener('click', () => voiceClearInput.click());
+
+function playVoiceLineClear(){
+  if(!soundOn || !voiceLineClear) return;
+  voiceLineClear.currentTime = 0;
+  voiceLineClear.play().catch(() => {}); // 再生がブロックされても静かに無視する
+}
+
+function playVoiceClear(){
+  if(!soundOn || !voiceClear) return;
+  voiceClear.currentTime = 0;
+  voiceClear.play().catch(() => {});
 }
 
 soundBtn.addEventListener('click', () => {
@@ -498,7 +536,10 @@ function newGame(){
   board = Array.from({length: GRID}, () => Array(GRID).fill(null));
   revealed = Array.from({length: GRID}, () => Array(GRID).fill(false));
   score = 0;
+  moveCount = 0;
+  gameActive = true;
   overlayEl.classList.remove('show');
+  clearOverlayEl.classList.remove('show');
   refillTray();
   renderAll();
 }
@@ -531,7 +572,15 @@ function renderBoard(){
       if(isFilled) cls += ' filled';
       else if(revealed[r][c]) cls += ' revealed';
       cell.className = cls;
-      if(isFilled) cell.style.background = board[r][c];
+      if(isFilled){
+        cell.style.background = board[r][c];
+      } else if(revealed[r][c]){
+        // 拡大した画像から、このマスの位置だけを切り出して表示する
+        // （盤面全体に画像を貼らないので、隙間から絵がうっすら透けることがない）
+        cell.style.backgroundImage = currentBg;
+        cell.style.backgroundSize = `${GRID * 100}% ${GRID * 100}%`;
+        cell.style.backgroundPosition = `${(c / (GRID - 1)) * 100}% ${(r / (GRID - 1)) * 100}%`;
+      }
       cell.dataset.r = r;
       cell.dataset.c = c;
       boardEl.appendChild(cell);
@@ -624,7 +673,7 @@ function clearLines(){
   });
 
   playClearSound(totalLines);
-  if(totalLines >= VOICE_LINE_THRESHOLD) playCustomVoice();
+  if(totalLines >= VOICE_LINE_THRESHOLD) playVoiceLineClear();
 
   const bonus = totalLines * 10 + (totalLines > 1 ? totalLines * 5 : 0);
   score += bonus;
@@ -633,7 +682,41 @@ function clearLines(){
     fullRows.forEach(r => { for(let c=0; c<GRID; c++) board[r][c] = null; });
     fullCols.forEach(c => { for(let r=0; r<GRID; r++) board[r][c] = null; });
     renderAll();
+    if(isImageFullyRevealed()) triggerClear();
   }, 300);
+}
+
+/* ---------------- クリア判定（写真が全部見えたらクリア） ---------------- */
+function isImageFullyRevealed(){
+  for(let r=0; r<GRID; r++){
+    for(let c=0; c<GRID; c++){
+      if(!revealed[r][c]) return false;
+    }
+  }
+  return true;
+}
+
+/* クリアまでの手数（moveCount）が少ないほどボーナス点が増える計算式。
+   数値は自由研究向けの調整ポイント：CLEAR_BONUS_BASEやCLEAR_BONUS_PER_MOVEを変えると
+   ボーナスの増減具合を変えられます */
+const CLEAR_BONUS_BASE = 1000;
+const CLEAR_BONUS_PER_MOVE = 8;
+function computeClearBonus(moves){
+  return Math.max(0, CLEAR_BONUS_BASE - moves * CLEAR_BONUS_PER_MOVE);
+}
+
+function triggerClear(){
+  if(!gameActive) return;
+  gameActive = false;
+  const bonus = computeClearBonus(moveCount);
+  score += bonus;
+  best = Math.max(best, score);
+  renderAll();
+  document.getElementById('clearScore').textContent = score;
+  document.getElementById('clearBonusLine').textContent = `ボーナス: +${bonus}点（${moveCount}手）`;
+  document.getElementById('clearBest').textContent = 'ベストスコア: ' + best;
+  clearOverlayEl.classList.add('show');
+  playVoiceClear();
 }
 
 function anyPieceFits(){
@@ -649,8 +732,10 @@ function anyPieceFits(){
 }
 
 function checkGameOver(){
+  if(!gameActive) return; // すでにクリア済み・ゲームオーバー済みなら何もしない
   if(tray.every(p => p === null)) return; // 補充前なので判定しない
   if(!anyPieceFits()){
+    gameActive = false;
     best = Math.max(best, score);
     document.getElementById('finalScore').textContent = score;
     document.getElementById('finalBest').textContent = 'ベストスコア: ' + best;
@@ -660,6 +745,7 @@ function checkGameOver(){
 
 /* ---------------- ドラッグ操作（マウス・タッチ共通） ---------------- */
 function startDrag(e, slotIndex){
+  if(!gameActive) return;
   const piece = tray[slotIndex];
   if(!piece) return;
   e.preventDefault();
@@ -758,6 +844,7 @@ function onDragEnd(){
 
   if(lastAnchor && canPlace(piece.shape, lastAnchor.r, lastAnchor.c)){
     placePiece(piece, lastAnchor.r, lastAnchor.c);
+    moveCount++;
     tray[slotIndex] = null;
     if(tray.every(p => p === null)) refillTray();
     renderAll();
@@ -771,6 +858,7 @@ function onDragEnd(){
 /* ---------------- ボタン ---------------- */
 document.getElementById('resetBtn').addEventListener('click', newGame);
 document.getElementById('retryBtn').addEventListener('click', newGame);
+document.getElementById('clearRetryBtn').addEventListener('click', newGame);
 
 newGame();
 </script>
