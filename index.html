@@ -1,3 +1,4 @@
+--- START OF FILE text/html ---
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -172,6 +173,7 @@
   .drag-cell{
     border-radius: 6px;
     margin: 2px;
+    pointer-events: none;
   }
 
   .actions{
@@ -651,7 +653,7 @@ const toastEl = document.getElementById('toast');
 // 背景画像のデフォルト設定
 const DEFAULT_BG = 'linear-gradient(200deg, #FFD37A 0%, #FF9F5B 32%, #4FA8FF 68%, #7F77DD 100%)';
 let currentBg = DEFAULT_BG;
-let currentPhotoDataUrl = null; // クリア画面で大きく表示するための元画像データ
+let currentPhotoObjectUrl = null; // メモリ節約のためObject URLを使用
 
 // 音声ファイル管理用オブジェクト
 let voiceLineClear = null;
@@ -711,20 +713,23 @@ configSaveBtn.addEventListener('click', () => {
   }
 });
 
-/* ---------------- 画像アップロード ---------------- */
+/* ---------------- 画像アップロード (Blob URL方式によるメモリ対策) ---------------- */
 photoSelectBtn.addEventListener('click', () => photoInput.click());
 photoInput.addEventListener('change', (e) => {
   const file = e.target.files[0];
   if(!file) return;
-  const reader = new FileReader();
-  reader.onload = (ev) => {
-    currentBg = `url(${ev.target.result})`;
-    currentPhotoDataUrl = ev.target.result;
-    photoStatus.value = file.name;
-    renderBoard();
-    showToast("写真を読み込みました");
-  };
-  reader.readAsDataURL(file);
+
+  // 以前のObjectURLがあれば解放してメモリリークを防ぐ
+  if (currentPhotoObjectUrl) {
+    URL.revokeObjectURL(currentPhotoObjectUrl);
+  }
+
+  // Blob URLを生成
+  currentPhotoObjectUrl = URL.createObjectURL(file);
+  currentBg = `url(${currentPhotoObjectUrl})`;
+  photoStatus.value = file.name;
+  renderBoard();
+  showToast("写真を読み込みました");
 });
 
 /* ---------------- 音声アップロードと管理 ---------------- */
@@ -988,6 +993,7 @@ function shapeBounds(shape){
   return { rows: maxR + 1, cols: maxC + 1 };
 }
 
+// 枠が歪まないように空のマスも実寸サイズを確保するよう修正
 function buildPieceGrid(piece, cellPx){
   const { rows, cols } = shapeBounds(piece.shape);
   const wrap = document.createElement('div');
@@ -998,11 +1004,13 @@ function buildPieceGrid(piece, cellPx){
   for(let r=0; r<rows; r++){
     for(let c=0; c<cols; c++){
       const cellEl = document.createElement('div');
+      cellEl.style.width = cellPx + 'px';
+      cellEl.style.height = cellPx + 'px';
       if(filledSet.has(r + '_' + c)){
         cellEl.className = 'piece-cell';
         cellEl.style.background = piece.color;
-        cellEl.style.width = cellPx + 'px';
-        cellEl.style.height = cellPx + 'px';
+      } else {
+        cellEl.style.background = 'transparent';
       }
       wrap.appendChild(cellEl);
     }
@@ -1116,8 +1124,8 @@ function triggerClear(){
   score += bonus;
   best = Math.max(best, score);
   renderAll();
-  if(currentPhotoDataUrl){
-    clearPhotoImg.src = currentPhotoDataUrl;
+  if(currentPhotoObjectUrl){
+    clearPhotoImg.src = currentPhotoObjectUrl;
     clearPhotoWrap.style.display = 'block';
   } else {
     clearPhotoWrap.style.display = 'none';
@@ -1153,7 +1161,7 @@ function checkGameOver(){
   }
 }
 
-/* ---------------- ドラッグ操作（位置ズレ対策） ---------------- */
+/* ---------------- ドラッグ操作（位置ズレ＆ワープ完全対策） ---------------- */
 function startDrag(e, slotIndex){
   if(!gameActive) return;
   const piece = tray[slotIndex];
@@ -1173,24 +1181,46 @@ function startDrag(e, slotIndex){
   for(let r=0; r<rows; r++){
     for(let c=0; c<cols; c++){
       const cellEl = document.createElement('div');
+      cellEl.style.width = cellPx + 'px';
+      cellEl.style.height = cellPx + 'px';
       if(filledSet.has(r + '_' + c)){
         cellEl.className = 'drag-cell';
         cellEl.style.background = piece.color;
-        cellEl.style.width = cellPx + 'px';
-        cellEl.style.height = cellPx + 'px';
+      } else {
+        cellEl.style.background = 'transparent';
       }
       dragProxy.appendChild(cellEl);
     }
   }
   dragProxy.style.display = 'grid';
 
-  trayEls[slotIndex].classList.add('dragging-source');
+  const slotEl = trayEls[slotIndex];
+  slotEl.classList.add('dragging-source');
+
+  // 【ズレ対策のキモ】トレイ内のクリック箇所と、拡大されたドラッグ用プロキシの正確な初期位置オフセットを算出
+  const gridEl = slotEl.querySelector('.piece-grid');
+  let dragOffsetX = cellPx / 2;
+  let dragOffsetY = cellPx / 2;
+
+  if (gridEl) {
+    const gridRect = gridEl.getBoundingClientRect();
+    const clickX = e.clientX - gridRect.left;
+    const clickY = e.clientY - gridRect.top;
+
+    // トレイ用グリッド（セルサイズ18px + 余白3px = 約21px間隔）から
+    // 盤面グリッド（cellPx + 余白4px）へのスケーリング比率を計算
+    const ratio = (cellPx + 4) / 21;
+    dragOffsetX = clickX * ratio;
+    dragOffsetY = clickY * ratio;
+  }
 
   dragState = {
     slotIndex,
     piece,
     rows,
     cols,
+    dragOffsetX,
+    dragOffsetY,
     lastAnchor: null,
     isTouch: e.pointerType === 'touch',
   };
@@ -1208,22 +1238,21 @@ function boardCellPx(){
 function onDragMove(e){
   if(!dragState) return;
   
-  // 指やマウスの真下からピース左上(0,0)セルがズレないように調整。
-  // タッチ操作時は、指でピースが隠れないよう少し上に持ち上げる(lift)
   const lift = dragState.isTouch ? 80 : 10;
   const px = boardCellPx();
 
-  // dragProxyの位置（左上端）を更新
-  dragProxy.style.left = (e.clientX - px / 2) + 'px';
-  dragProxy.style.top = (e.clientY - lift - px / 2) + 'px';
+  // 指の真下から相対位置（dragOffsetX/Y）を保った位置へ配置
+  const left = e.clientX - dragState.dragOffsetX;
+  const top = e.clientY - lift - dragState.dragOffsetY;
 
-  // ピース左上(0,0)セルの基準点（指の真下、liftを考慮した座標）に
-  // 実際に重なっている盤面セルをDOMから直接取得する。
-  // ※以前はpadding/gapの値をJS側で仮定して座標計算していたが、
-  //   実際の盤面にはgapが存在しないなど前提とズレがあり、
-  //   セル位置が右・下に行くほど誤差が蓄積してドラッグ位置がズレていた。
-  //   DOM上の実際の要素を直接判定することでこの問題を解消する。
-  const targetPoint = document.elementFromPoint(e.clientX, e.clientY - lift);
+  dragProxy.style.left = left + 'px';
+  dragProxy.style.top = top + 'px';
+
+  // 常にピースの「[0,0]のセル」が位置する中心点を算出して基準のマスを検知する
+  const checkX = left + (px + 4) / 2;
+  const checkY = top + (px + 4) / 2;
+
+  const targetPoint = document.elementFromPoint(checkX, checkY);
   const cellEl = targetPoint ? targetPoint.closest('.cell') : null;
 
   if(cellEl && cellEl.dataset.r !== undefined && cellEl.closest('#board') === boardEl){
