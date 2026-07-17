@@ -271,6 +271,21 @@
   }
   .card button.big-btn:active{ transform: scale(.97); }
 
+  .clear-photo-wrap{
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    border-radius: 16px;
+    overflow: hidden;
+    margin-bottom: 16px;
+    box-shadow: 0 0 0 2px var(--gold), 0 8px 20px rgba(0,0,0,.4);
+  }
+  .clear-photo-wrap img{
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
   /* ---------- 設定モーダル ---------- */
   .config-section {
     text-align: left;
@@ -291,6 +306,7 @@
   }
   .config-row input[type="text"] {
     flex: 1;
+    min-width: 0;
     background: var(--bg);
     border: 1px solid var(--cell-border);
     color: var(--ink);
@@ -299,6 +315,8 @@
     font-size: 13px;
     font-family: inherit;
     pointer-events: none;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .config-btn {
     background: var(--panel-2);
@@ -310,6 +328,7 @@
     cursor: pointer;
     font-weight: 700;
     white-space: nowrap;
+    flex-shrink: 0;
   }
   .config-btn:active { transform: scale(0.96); }
   .config-btn.test-btn {
@@ -370,39 +389,90 @@
     opacity: 1;
     transform: translate(-50%, 0);
   }
+
+  /* ---------- トップ画面 / ゲーム画面 ---------- */
+  body.no-scroll{
+    overflow: hidden;
+    touch-action: none;
+  }
+  .top-screen{
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+  }
+  .top-screen.hide{ display: none; }
+  .top-screen .score-box.best{
+    width: 100%;
+    max-width: 220px;
+    margin-bottom: 22px;
+  }
+  .play-btn{
+    font-size: 17px;
+    padding: 16px 44px;
+    margin-bottom: 18px;
+  }
+  .game-screen{
+    display: none;
+    width: 100%;
+    flex-direction: column;
+    align-items: center;
+    max-height: calc(100vh - 58px);
+    max-height: calc(100dvh - 58px);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
+  }
+  .game-screen.show{ display: flex; }
 </style>
 </head>
 <body>
 
 <div class="app">
-  <h1>目指せアンバーリバボー!パズル</h1>
+  <h1 id="titleEl">目指せアンバーリバボー!パズル</h1>
 
-  <div class="scoreboard">
-    <div class="score-box">
-      <div class="label">スコア</div>
-      <div class="value" id="scoreVal">0</div>
-    </div>
+  <!-- トップ画面 -->
+  <div id="topScreen" class="top-screen">
     <div class="score-box best">
-      <div class="label">ベスト</div>
-      <div class="value" id="bestVal">0</div>
+      <div class="label">ベストスコア</div>
+      <div class="value" id="topBestVal">0</div>
+    </div>
+    <button class="btn primary play-btn" id="playBtn">▶ プレイ</button>
+    <div class="actions" style="margin-top:0;">
+      <button class="btn" id="configBtnTop">⚙️ 設定をひらく</button>
+      <button class="btn sound" id="soundBtnTop">音 ON</button>
+    </div>
+    <p class="help">下のブロックを指でつかんで、盤面にドラッグして置いてね。<br>たて・よこのマスがすべて埋まると、その列が消えてスコアが増えるよ。写真を選んでおくと、消した場所から少しずつ写真が見えてきて、写真が全部見えたらクリア！クリアまでの手数が少ないほど、ボーナス点がたくさんもらえるよ。</p>
+  </div>
+
+  <!-- ゲーム画面 -->
+  <div id="gameScreen" class="game-screen">
+    <div class="scoreboard">
+      <div class="score-box">
+        <div class="label">スコア</div>
+        <div class="value" id="scoreVal">0</div>
+      </div>
+      <div class="score-box best">
+        <div class="label">ベスト</div>
+        <div class="value" id="bestVal">0</div>
+      </div>
+    </div>
+
+    <div id="board"></div>
+
+    <div id="tray">
+      <div class="slot" data-slot="0"></div>
+      <div class="slot" data-slot="1"></div>
+      <div class="slot" data-slot="2"></div>
+    </div>
+
+    <div class="actions">
+      <button class="btn primary" id="configBtn">⚙️ 設定をひらく</button>
+      <button class="btn" id="resetBtn">新しいゲーム</button>
+      <button class="btn sound" id="soundBtn">音 ON</button>
+      <button class="btn" id="endPlayBtn">■ プレイ終了</button>
     </div>
   </div>
-
-  <div id="board"></div>
-
-  <div id="tray">
-    <div class="slot" data-slot="0"></div>
-    <div class="slot" data-slot="1"></div>
-    <div class="slot" data-slot="2"></div>
-  </div>
-
-  <div class="actions">
-    <button class="btn primary" id="configBtn">⚙️ 設定をひらく</button>
-    <button class="btn" id="resetBtn">新しいゲーム</button>
-    <button class="btn sound" id="soundBtn">音 ON</button>
-  </div>
-
-  <p class="help">下のブロックを指でつかんで、盤面にドラッグして置いてね。<br>たて・よこのマスがすべて埋まると、その列が消えてスコアが増えるよ。写真を選んでおくと、消した場所から少しずつ写真が見えてきて、写真が全部見えたらクリア！クリアまでの手数が少ないほど、ボーナス点がたくさんもらえるよ。</p>
 </div>
 
 <!-- ドラッグ時のゴースト用 -->
@@ -415,6 +485,7 @@
     <div class="final-score" id="finalScore">0</div>
     <div class="final-best" id="finalBest">ベストスコア: 0</div>
     <button class="big-btn" id="retryBtn">もう一度あそぶ</button>
+    <button class="btn" id="topBtn" style="margin-top:10px; width:100%; justify-content:center;">トップへ戻る</button>
   </div>
 </div>
 
@@ -422,10 +493,14 @@
 <div id="clearOverlay">
   <div class="card">
     <h2>クリア!!</h2>
+    <div class="clear-photo-wrap" id="clearPhotoWrap" style="display:none;">
+      <img id="clearPhotoImg" alt="完成した写真">
+    </div>
     <div class="final-score" id="clearScore">0</div>
     <div class="clear-bonus" id="clearBonusLine">ボーナス: +0点（0手）</div>
     <div class="final-best" id="clearBest">ベストスコア: 0</div>
     <button class="big-btn" id="clearRetryBtn">もう一度あそぶ</button>
+    <button class="btn" id="clearTopBtn" style="margin-top:10px; width:100%; justify-content:center;">トップへ戻る</button>
   </div>
 </div>
 
@@ -535,7 +610,21 @@ const scoreValEl = document.getElementById('scoreVal');
 const bestValEl = document.getElementById('bestVal');
 const overlayEl = document.getElementById('overlay');
 const clearOverlayEl = document.getElementById('clearOverlay');
+const clearPhotoWrap = document.getElementById('clearPhotoWrap');
+const clearPhotoImg = document.getElementById('clearPhotoImg');
 const soundBtn = document.getElementById('soundBtn');
+
+// トップ画面 / ゲーム画面 切り替え用UI
+const topScreenEl = document.getElementById('topScreen');
+const titleEl = document.getElementById('titleEl');
+const gameScreenEl = document.getElementById('gameScreen');
+const topBestValEl = document.getElementById('topBestVal');
+const playBtn = document.getElementById('playBtn');
+const endPlayBtn = document.getElementById('endPlayBtn');
+const topBtn = document.getElementById('topBtn');
+const clearTopBtn = document.getElementById('clearTopBtn');
+const soundBtnTop = document.getElementById('soundBtnTop');
+const configBtnTop = document.getElementById('configBtnTop');
 
 // 設定モーダル用UI
 const configBtn = document.getElementById('configBtn');
@@ -562,6 +651,7 @@ const toastEl = document.getElementById('toast');
 // 背景画像のデフォルト設定
 const DEFAULT_BG = 'linear-gradient(200deg, #FFD37A 0%, #FF9F5B 32%, #4FA8FF 68%, #7F77DD 100%)';
 let currentBg = DEFAULT_BG;
+let currentPhotoDataUrl = null; // クリア画面で大きく表示するための元画像データ
 
 // 音声ファイル管理用オブジェクト
 let voiceLineClear = null;
@@ -600,11 +690,13 @@ function syncConfigUI() {
 }
 
 // モーダルの開閉
-configBtn.addEventListener('click', () => {
+function openConfigModal(){
   syncConfigUI();
   configModal.classList.add('show');
   ensureAudio();
-});
+}
+configBtn.addEventListener('click', openConfigModal);
+configBtnTop.addEventListener('click', openConfigModal);
 
 configSaveBtn.addEventListener('click', () => {
   let sizeChanged = (tempGridSize !== GRID);
@@ -627,6 +719,7 @@ photoInput.addEventListener('change', (e) => {
   const reader = new FileReader();
   reader.onload = (ev) => {
     currentBg = `url(${ev.target.result})`;
+    currentPhotoDataUrl = ev.target.result;
     photoStatus.value = file.name;
     renderBoard();
     showToast("写真を読み込みました");
@@ -707,12 +800,16 @@ function ensureAudio(){
   }
 }
 
-soundBtn.addEventListener('click', () => {
+function toggleSound(){
   soundOn = !soundOn;
-  soundBtn.textContent = soundOn ? '音 ON' : '音 OFF';
-  soundBtn.classList.toggle('off', !soundOn);
+  [soundBtn, soundBtnTop].forEach(btn => {
+    btn.textContent = soundOn ? '音 ON' : '音 OFF';
+    btn.classList.toggle('off', !soundOn);
+  });
   if (soundOn) ensureAudio();
-});
+}
+soundBtn.addEventListener('click', toggleSound);
+soundBtnTop.addEventListener('click', toggleSound);
 
 function playClearSound(lines){
   if(!soundOn || !audioCtx) return;
@@ -797,6 +894,22 @@ function applyGridCSS() {
     cellSize = 'clamp(26px, 8.6vw, 42px)';
   }
   document.documentElement.style.setProperty('--cell', cellSize);
+}
+
+/* ---------------- トップ画面 / ゲーム画面の切り替え ---------------- */
+function showTopScreen(){
+  titleEl.style.display = '';
+  topScreenEl.classList.remove('hide');
+  gameScreenEl.classList.remove('show');
+  document.body.classList.remove('no-scroll');
+  topBestValEl.textContent = best;
+}
+
+function showGameScreen(){
+  titleEl.style.display = 'none';
+  topScreenEl.classList.add('hide');
+  gameScreenEl.classList.add('show');
+  document.body.classList.add('no-scroll');
 }
 
 /* ---------------- ゲーム開始・リセット ---------------- */
@@ -931,9 +1044,17 @@ function clearLines(){
   const totalLines = fullRows.length + fullCols.length;
   if(totalLines === 0) return;
 
+  // 行と列が同時に揃った交差セルは1回だけ処理する（重複排除）
   const cellsToFlash = [];
-  fullRows.forEach(r => { for(let c=0; c<GRID; c++) cellsToFlash.push([r,c]); });
-  fullCols.forEach(c => { for(let r=0; r<GRID; r++) cellsToFlash.push([r,c]); });
+  const flashedKeys = new Set();
+  const addFlashCell = (r, c) => {
+    const key = r + '_' + c;
+    if(flashedKeys.has(key)) return;
+    flashedKeys.add(key);
+    cellsToFlash.push([r,c]);
+  };
+  fullRows.forEach(r => { for(let c=0; c<GRID; c++) addFlashCell(r, c); });
+  fullCols.forEach(c => { for(let r=0; r<GRID; r++) addFlashCell(r, c); });
 
   cellsToFlash.forEach(([r,c]) => {
     const el = boardEl.querySelector(`[data-r="${r}"][data-c="${c}"]`);
@@ -995,6 +1116,12 @@ function triggerClear(){
   score += bonus;
   best = Math.max(best, score);
   renderAll();
+  if(currentPhotoDataUrl){
+    clearPhotoImg.src = currentPhotoDataUrl;
+    clearPhotoWrap.style.display = 'block';
+  } else {
+    clearPhotoWrap.style.display = 'none';
+  }
   document.getElementById('clearScore').textContent = score;
   document.getElementById('clearBonusLine').textContent = `ボーナス: +${bonus}点（${moveCount}手）`;
   document.getElementById('clearBest').textContent = 'ベストスコア: ' + best;
@@ -1090,21 +1217,24 @@ function onDragMove(e){
   dragProxy.style.left = (e.clientX - px / 2) + 'px';
   dragProxy.style.top = (e.clientY - lift - px / 2) + 'px';
 
-  const rect = boardEl.getBoundingClientRect();
-  
-  // 盤面内のローカル座標（padding 10pxを差し引き）
-  const localX = e.clientX - rect.left - 10;
-  const localY = (e.clientY - lift) - rect.top - 10;
+  // ピース左上(0,0)セルの基準点（指の真下、liftを考慮した座標）に
+  // 実際に重なっている盤面セルをDOMから直接取得する。
+  // ※以前はpadding/gapの値をJS側で仮定して座標計算していたが、
+  //   実際の盤面にはgapが存在しないなど前提とズレがあり、
+  //   セル位置が右・下に行くほど誤差が蓄積してドラッグ位置がズレていた。
+  //   DOM上の実際の要素を直接判定することでこの問題を解消する。
+  const targetPoint = document.elementFromPoint(e.clientX, e.clientY - lift);
+  const cellEl = targetPoint ? targetPoint.closest('.cell') : null;
 
-  // 各セルの境界幅(gap = 4px)を考慮してアンカーを特定
-  const cellStep = px + 4;
-  
-  // 掴んでいる場所をもとに、対応する(r, c)マスを算出
-  let anchorC = Math.round(localX / cellStep);
-  let anchorR = Math.round(localY / cellStep);
-
-  dragState.lastAnchor = { r: anchorR, c: anchorC };
-  paintGhost(anchorR, anchorC);
+  if(cellEl && cellEl.dataset.r !== undefined && cellEl.closest('#board') === boardEl){
+    const anchorR = parseInt(cellEl.dataset.r, 10);
+    const anchorC = parseInt(cellEl.dataset.c, 10);
+    dragState.lastAnchor = { r: anchorR, c: anchorC };
+    paintGhost(anchorR, anchorC);
+  } else {
+    dragState.lastAnchor = null;
+    clearGhost();
+  }
 }
 
 function paintGhost(anchorR, anchorC){
@@ -1154,8 +1284,31 @@ document.getElementById('resetBtn').addEventListener('click', newGame);
 document.getElementById('retryBtn').addEventListener('click', newGame);
 document.getElementById('clearRetryBtn').addEventListener('click', newGame);
 
-// ゲーム起動
+/* ---------------- プレイ開始・終了・トップへ戻る ---------------- */
+playBtn.addEventListener('click', () => {
+  newGame();
+  showGameScreen();
+});
+
+endPlayBtn.addEventListener('click', () => {
+  gameActive = false;
+  best = Math.max(best, score);
+  showTopScreen();
+});
+
+topBtn.addEventListener('click', () => {
+  overlayEl.classList.remove('show');
+  showTopScreen();
+});
+
+clearTopBtn.addEventListener('click', () => {
+  clearOverlayEl.classList.remove('show');
+  showTopScreen();
+});
+
+// ゲーム起動（初期状態はトップ画面）
 newGame();
+showTopScreen();
 </script>
 </body>
 </html>
