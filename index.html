@@ -1392,6 +1392,7 @@ function updateFeverUI() {
 }
 
 function triggerFeverEffects() {
+  ensureAudio();
   if (!soundOn || !audioCtx) return;
   // フィーバーファンファーレSEの作成
   const now = audioCtx.currentTime;
@@ -1602,6 +1603,9 @@ function clearLines(){
   const totalLines = fullRows.length + fullCols.length;
   if(totalLines === 0) return;
 
+  // アニメーション中のため操作をロック
+  isAnimating = true;
+
   // 縦列と横列の同時消し（十字消しなど）の検知
   const isCrossClear = fullRows.length > 0 && fullCols.length > 0;
   if (isCrossClear) {
@@ -1721,12 +1725,16 @@ function clearLines(){
       setTimeout(() => {
         if (hasFallen) {
           clearLines();
+        } else {
+          isAnimating = false; // 連鎖が完全に終わったらロック解除
+          renderAll();
         }
         if(isImageFullyRevealed()) triggerClear();
       }, 350);
     } else {
-      // 通常モード：落下させずに再描画と終了判定
+      // 通常モード：落下させずに再描画
       renderAll();
+      isAnimating = false; // ロック解除
       if(isImageFullyRevealed()) triggerClear();
     }
 
@@ -1780,16 +1788,17 @@ function triggerClear() {
   score += bonus;
   best = Math.max(best, score);
 
-  // 写真表示部分の切り替え
+  // 写真表示部分の切り替え（写真未選択時の壊れた画像アイコンを防止）
   if (clearPhotoWrap && clearPhotoImg) {
     if (currentPhotoObjectUrl) {
       clearPhotoImg.src = currentPhotoObjectUrl;
-      clearPhotoImg.style.background = 'none';
+      clearPhotoImg.style.display = 'block';
+      clearPhotoWrap.style.background = 'none';
       clearPhotoWrap.style.display = 'block';
     } else {
       // デフォルト背景の場合
-      clearPhotoImg.removeAttribute('src');
-      clearPhotoImg.style.background = currentBg;
+      clearPhotoImg.style.display = 'none'; // 画像タグ自体を非表示にして枠崩れを防ぐ
+      clearPhotoWrap.style.background = currentBg;
       clearPhotoWrap.style.display = 'block';
     }
   }
