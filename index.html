@@ -106,6 +106,10 @@
     background: rgb(38,42,82);
     border-radius: 6px;
     transition: background .12s, transform .12s, box-shadow .12s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    user-select: none;
   }
   .cell.revealed{
     background: transparent;
@@ -130,6 +134,15 @@
     0%{ transform: scale(1); filter: brightness(1); }
     35%{ transform: scale(1.3); filter: brightness(2.4); }
     100%{ transform: scale(0); filter: brightness(2.8); opacity: 0; }
+  }
+
+  /* 爆弾(💣)セルの点滅パルス */
+  .bomb-cell {
+    animation: bombPulse 1s infinite alternate ease-in-out;
+  }
+  @keyframes bombPulse {
+    0% { transform: scale(1); filter: drop-shadow(0 0 1px rgba(255,0,0,0.4)); }
+    100% { transform: scale(1.15); filter: drop-shadow(0 0 6px rgba(255, 68, 68, 0.9)); }
   }
 
   #tray{
@@ -158,6 +171,10 @@
   .piece-cell{
     border-radius: 4px;
     margin: 1.5px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    user-select: none;
   }
 
   #dragProxy{
@@ -173,6 +190,9 @@
     border-radius: 6px;
     margin: 2px;
     pointer-events: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
 
   .actions{
@@ -463,7 +483,7 @@
       <button class="btn" id="configBtnTop">⚙️ 設定をひらく</button>
       <button class="btn sound" id="soundBtnTop">音 ON</button>
     </div>
-    <p class="help">下のブロックを指でつかんで、盤面にドラッグして置いてね。<br>たて・よこのマスがすべて埋まると、その列が消えてスコアが増えるよ。写真を選んでおくと、消した場所から少しずつ写真が見えてきて、写真が全部見えたらクリア！クリアまでの手数が少ないほど、ボーナス点がたくさんもらえるよ。</p>
+    <p class="help">下のブロックを指でつかんで、盤面にドラッグして置いてね。<br>たて・よこのマスがすべて埋まると、その列が消えてスコアが増えるよ。写真を選んでおくと、消した場所から少しずつ写真が見えてきて、写真が全部見えたらクリア！クリアまでの手数が少ないほど、ボーナス点がたくさんもらえるよ。<br><strong style="color:var(--danger)">※ごく稀に💣(爆弾)付きのピースが出現！ライン消去時に周囲を巻き込んで連鎖爆発するよ！</strong></p>
   </div>
 
   <!-- ゲーム画面 -->
@@ -754,18 +774,16 @@ configSaveBtn.addEventListener('click', () => {
   }
 });
 
-/* ---------------- 写真アップロード ---------------- */
+/* ---------------- 写真アップロード (Blob URL方式によるメモリ対策) ---------------- */
 photoSelectBtn.addEventListener('click', () => photoInput.click());
 photoInput.addEventListener('change', (e) => {
   const file = e.target.files[0];
   if(!file) return;
 
-  // 以前のObjectURLがあれば解放してメモリリークを防ぐ
   if (currentPhotoObjectUrl) {
     URL.revokeObjectURL(currentPhotoObjectUrl);
   }
 
-  // Blob URLを生成
   currentPhotoObjectUrl = URL.createObjectURL(file);
   currentBg = `url(${currentPhotoObjectUrl})`;
   photoStatus.value = file.name;
@@ -830,7 +848,7 @@ function playCustomVoice(audioElement) {
   if (!soundOn || !audioElement) return;
   try {
     audioElement.currentTime = 0;
-    audioElement.loop = false; // ループを確実に防止
+    audioElement.loop = false;
     audioElement.play().catch(err => {
       console.warn("音声の再生が制限されました:", err);
     });
@@ -870,8 +888,6 @@ function ensureAudio(){
   if(audioCtx && audioCtx.state === 'suspended') {
     audioCtx.resume();
   }
-  // ※【修正】ここで行われていた声ファイルの強制的な再生＆停止を廃止
-  // これにより、ピース選択時に声が一瞬漏れるバグを完全に抑制します。
 }
 
 function toggleSound(){
@@ -885,6 +901,7 @@ function toggleSound(){
 soundBtn.addEventListener('click', toggleSound);
 soundBtnTop.addEventListener('click', toggleSound);
 
+// 通常の消去サウンド
 function playClearSound(lines){
   if(!soundOn || !audioCtx) return;
   const notes = [523.25, 659.25, 783.99, 987.77, 1174.66]; // ペンタトニック
@@ -905,6 +922,22 @@ function playClearSound(lines){
   }
 }
 
+// 爆発サウンド（重低音ノイズ合成）
+function playBombSound(){
+  if(!soundOn || !audioCtx) return;
+  const now = audioCtx.currentTime;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = 'sawtooth';
+  osc.frequency.setValueAtTime(160, now);
+  osc.frequency.exponentialRampToValueAtTime(10, now + 0.45);
+  gain.gain.setValueAtTime(0.35, now);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
+  osc.connect(gain).connect(audioCtx.destination);
+  osc.start(now);
+  osc.stop(now + 0.47);
+}
+
 function playVoiceLineClear(){
   playCustomVoice(voiceLineClear);
 }
@@ -914,41 +947,43 @@ function playVoiceClear(){
 }
 
 /* ---------------- 爆発エフェクト ---------------- */
-function explodeCell(r, c, color){
+function explodeCell(r, c, color, isBomb = false){
   const el = boardEl.querySelector(`[data-r="${r}"][data-c="${c}"]`);
   if(!el) return;
   const rect = el.getBoundingClientRect();
   const cx = rect.left + rect.width / 2;
   const cy = rect.top + rect.height / 2;
-  const N = 7;
+  
+  // 爆弾の場合は火花・パーティクル数を増加
+  const N = isBomb ? 18 : 7;
   for(let i=0; i<N; i++){
     const p = document.createElement('div');
     p.style.position = 'fixed';
     p.style.left = cx + 'px';
     p.style.top = cy + 'px';
-    p.style.width = '6px';
-    p.style.height = '6px';
-    p.style.background = color || 'var(--gold)';
+    p.style.width = isBomb ? '8px' : '6px';
+    p.style.height = isBomb ? '8px' : '6px';
+    p.style.background = isBomb ? (Math.random() > 0.5 ? '#FF4500' : 'var(--gold)') : (color || 'var(--gold)');
     p.style.borderRadius = '2px';
     p.style.pointerEvents = 'none';
     p.style.zIndex = '60';
     document.body.appendChild(p);
 
     const angle = Math.random() * Math.PI * 2;
-    const dist = 26 + Math.random() * 40;
+    const dist = isBomb ? (40 + Math.random() * 60) : (26 + Math.random() * 40);
     const dx = Math.cos(angle) * dist;
     const dy = Math.sin(angle) * dist;
     const rot = Math.floor(Math.random() * 360);
 
     const anim = p.animate([
       { transform: 'translate(-50%,-50%) rotate(0deg) scale(1)', opacity: 1 },
-      { transform: `translate(${dx - 3}px, ${dy - 3}px) rotate(${rot}deg) scale(.2)`, opacity: 0 }
-    ], { duration: 420 + Math.random() * 160, easing: 'cubic-bezier(.2,.8,.3,1)' });
+      { transform: `translate(${dx - 3}px, ${dy - 3}px) rotate(${rot}deg) scale(.1)`, opacity: 0 }
+    ], { duration: (isBomb ? 550 : 420) + Math.random() * 160, easing: 'cubic-bezier(.2,.8,.3,1)' });
     anim.onfinish = () => p.remove();
   }
 }
 
-/* ---------------- セルサイズ動的決定（ホワイトアウト防止） ---------------- */
+/* ---------------- セルサイズ動的決定 ---------------- */
 function applyGridCSS() {
   boardEl.style.gridTemplateColumns = `repeat(${GRID}, var(--cell))`;
   boardEl.style.gridTemplateRows = `repeat(${GRID}, var(--cell))`;
@@ -996,10 +1031,15 @@ function refillTray(){
   tray = [randomPiece(), randomPiece(), randomPiece()];
 }
 
+// 5%の確率で、ピース内のランダムな1セルを爆弾化する
 function randomPiece(){
   const shape = SHAPES[Math.floor(Math.random() * SHAPES.length)];
   const color = COLORS[Math.floor(Math.random() * COLORS.length)];
-  return { shape, color };
+  let bombIndex = -1;
+  if(Math.random() < 0.05){ // 出現確率 5%
+    bombIndex = Math.floor(Math.random() * shape.length);
+  }
+  return { shape, color, bombIndex };
 }
 
 /* ---------------- 描画更新 ---------------- */
@@ -1015,18 +1055,28 @@ function renderBoard(){
   for(let r=0; r<GRID; r++){
     for(let c=0; c<GRID; c++){
       const cell = document.createElement('div');
-      const isFilled = !!board[r][c];
+      const cellData = board[r][c];
+      const isFilled = !!cellData;
       let cls = 'cell';
       if(isFilled) cls += ' filled';
       else if(revealed[r][c]) cls += ' revealed';
       cell.className = cls;
       
       if(isFilled){
-        cell.style.background = board[r][c];
+        cell.style.background = cellData.color;
+        // 爆弾属性がある場合は💣マークを表示
+        if(cellData.isBomb){
+          cell.textContent = '💣';
+          cell.classList.add('bomb-cell');
+          cell.style.fontSize = 'calc(var(--cell) * 0.6)';
+        } else {
+          cell.textContent = '';
+        }
       } else if(revealed[r][c]){
         cell.style.backgroundImage = currentBg;
         cell.style.backgroundSize = `${GRID * 100}% ${GRID * 100}%`;
         cell.style.backgroundPosition = `${(c / (GRID - 1)) * 100}% ${(r / (GRID - 1)) * 100}%`;
+        cell.textContent = '';
       }
       cell.dataset.r = r;
       cell.dataset.c = c;
@@ -1061,14 +1111,28 @@ function buildPieceGrid(piece, cellPx){
   wrap.style.gridTemplateColumns = `repeat(${cols}, ${cellPx}px)`;
   wrap.style.gridTemplateRows = `repeat(${rows}, ${cellPx}px)`;
   const filledSet = new Set(piece.shape.map(([r,c]) => r + '_' + c));
+  
+  // 爆弾となるセルの座標キーを求める
+  let bombCoord = "";
+  if(piece.bombIndex !== undefined && piece.bombIndex !== -1){
+    const b = piece.shape[piece.bombIndex];
+    bombCoord = b[0] + '_' + b[1];
+  }
+
   for(let r=0; r<rows; r++){
     for(let c=0; c<cols; c++){
       const cellEl = document.createElement('div');
       cellEl.style.width = cellPx + 'px';
       cellEl.style.height = cellPx + 'px';
-      if(filledSet.has(r + '_' + c)){
+      const key = r + '_' + c;
+      if(filledSet.has(key)){
         cellEl.className = 'piece-cell';
         cellEl.style.background = piece.color;
+        if(key === bombCoord){
+          cellEl.textContent = '💣';
+          cellEl.classList.add('bomb-cell');
+          cellEl.style.fontSize = (cellPx * 0.6) + 'px';
+        }
       } else {
         cellEl.style.background = 'transparent';
       }
@@ -1089,13 +1153,15 @@ function canPlace(shape, anchorR, anchorC){
 }
 
 function placePiece(piece, anchorR, anchorC){
-  piece.shape.forEach(([dr, dc]) => {
-    board[anchorR + dr][anchorC + dc] = piece.color;
+  piece.shape.forEach(([dr, dc], idx) => {
+    const r = anchorR + dr;
+    const c = anchorC + dc;
+    const isBomb = (piece.bombIndex === idx);
+    board[r][c] = { color: piece.color, isBomb: isBomb };
   });
   const addedScore = piece.shape.length;
   score += addedScore;
 
-  // ピース配置時の得点を盤面上にポップアップ表示
   const targetCell = boardEl.querySelector(`[data-r="${anchorR}"][data-c="${anchorC}"]`);
   if (targetCell) {
     const rect = targetCell.getBoundingClientRect();
@@ -1103,7 +1169,7 @@ function placePiece(piece, anchorR, anchorC){
   }
 }
 
-/* ---------------- ライン消去判定 ---------------- */
+/* ---------------- ライン消去判定 (爆弾チェイン連鎖対応) ---------------- */
 function clearLines(){
   const fullRows = [];
   const fullCols = [];
@@ -1120,17 +1186,49 @@ function clearLines(){
   const totalLines = fullRows.length + fullCols.length;
   if(totalLines === 0) return;
 
-  // 行と列が同時に揃った交差セルは1回だけ処理する（重複排除）
-  const cellsToFlash = [];
-  const flashedKeys = new Set();
-  const addFlashCell = (r, c) => {
+  // 通常ライン揃いで消滅が決まったセルリスト
+  const initialCells = [];
+  const clearedKeys = new Set();
+  const addInitialCell = (r, c) => {
     const key = r + '_' + c;
-    if(flashedKeys.has(key)) return;
-    flashedKeys.add(key);
-    cellsToFlash.push([r,c]);
+    if(clearedKeys.has(key)) return;
+    clearedKeys.add(key);
+    initialCells.push([r, c]);
   };
-  fullRows.forEach(r => { for(let c=0; c<GRID; c++) addFlashCell(r, c); });
-  fullCols.forEach(c => { for(let r=0; r<GRID; r++) addFlashCell(r, c); });
+  fullRows.forEach(r => { for(let c=0; c<GRID; c++) addInitialCell(r, c); });
+  fullCols.forEach(c => { for(let r=0; r<GRID; r++) addInitialCell(r, c); });
+
+  // 誘爆ロジック (幅優先探索で爆弾チェインを計算)
+  const queue = [...initialCells];
+  const cellsToFlash = [...initialCells]; 
+  const flashKeys = new Set(clearedKeys);
+  const explodedBombs = new Set(); // 誘爆処理済みの爆弾座標
+
+  while(queue.length > 0){
+    const [r, c] = queue.shift();
+    const cellData = board[r][c];
+    if(cellData && cellData.isBomb && !explodedBombs.has(r + '_' + c)){
+      explodedBombs.add(r + '_' + c);
+      // 周囲8マス（自身を含め計9マス）を巻き込んで破壊
+      for(let dr = -1; dr <= 1; dr++){
+        for(let dc = -1; dc <= 1; dc++){
+          if(dr === 0 && dc === 0) continue;
+          const nr = r + dr;
+          const nc = c + dc;
+          if(nr >= 0 && nr < GRID && nc >= 0 && nc < GRID){
+            if(board[nr][nc]){ // 何かブロックがあれば爆発に巻き込む
+              const nKey = nr + '_' + nc;
+              if(!flashKeys.has(nKey)){
+                flashKeys.add(nKey);
+                cellsToFlash.push([nr, nc]);
+                queue.push([nr, nc]); // 巻き込まれた先が爆弾なら、さらに次ループで誘爆！
+              }
+            }
+          }
+        }
+      }
+    }
+  }
 
   // 得点ポップアップ表示の位置計算用に座標を記録
   let sumX = 0, sumY = 0, count = 0;
@@ -1145,39 +1243,47 @@ function clearLines(){
       count++;
     }
     
-    // 安全対策：消去直前のセル色
-    const cellColor = board[r] ? board[r][c] : null;
-    explodeCell(r, c, cellColor);
+    // 消去直前のセルの属性を読みだす
+    const cellData = board[r] ? board[r][c] : null;
+    const isBomb = cellData ? cellData.isBomb : false;
+    const cellColor = cellData ? cellData.color : null;
+    explodeCell(r, c, cellColor, isBomb);
     
     if (revealed[r]) {
       revealed[r][c] = true; 
     }
   });
 
+  // 音声演出
+  if (explodedBombs.size > 0) {
+    playBombSound(); // 爆発重低音
+  }
   playClearSound(totalLines);
   if(totalLines >= VOICE_LINE_THRESHOLD) {
     playVoiceLineClear();
   }
 
-  const bonus = totalLines * 10 + (totalLines > 1 ? totalLines * 5 : 0);
-  score += bonus;
+  // スコア計算：ライン成立スコア ＋ 爆弾巻き込みスコア（追加破壊セル×5点）
+  const normalClearCount = clearedKeys.size;
+  const totalClearedCount = cellsToFlash.length;
+  const bombBonusCount = Math.max(0, totalClearedCount - normalClearCount);
 
-  // 消去時の得点を、消去されたラインの中心にポップアップ表示
+  const lineBonus = totalLines * 10 + (totalLines > 1 ? totalLines * 5 : 0);
+  const bombBonus = bombBonusCount * 5;
+  const totalAddedScore = lineBonus + bombBonus;
+  
+  score += totalAddedScore;
+
+  // 消去時の得点をポップアップ表示
   if (count > 0) {
-    showScorePopup(sumX / count, sumY / count - 15, `+${bonus}`, true);
+    const textPrefix = explodedBombs.size > 0 ? `💣連鎖! +` : `+`;
+    showScorePopup(sumX / count, sumY / count - 15, `${textPrefix}${totalAddedScore}`, true);
   }
 
   setTimeout(() => {
-    // 安全なデータクリア
-    fullRows.forEach(r => { 
-      if (board[r]) {
-        for(let c=0; c<GRID; c++) board[r][c] = null; 
-      }
-    });
-    fullCols.forEach(c => { 
-      for(let r=0; r<GRID; r++) {
-        if (board[r]) board[r][c] = null; 
-      }
+    // 盤面データからクリアされたセルを消去
+    cellsToFlash.forEach(([r, c]) => {
+      if (board[r]) board[r][c] = null;
     });
     renderAll();
     if(isImageFullyRevealed()) triggerClear();
@@ -1254,20 +1360,31 @@ function startDrag(e, slotIndex){
   const cellPx = boardCellPx();
   const { rows, cols } = shapeBounds(piece.shape);
 
-  // dragProxyの形状初期化
   dragProxy.style.gridTemplateColumns = `repeat(${cols}, ${cellPx}px)`;
   dragProxy.style.gridTemplateRows = `repeat(${rows}, ${cellPx}px)`;
   dragProxy.innerHTML = '';
   
   const filledSet = new Set(piece.shape.map(([r,c]) => r + '_' + c));
+  let bombCoord = "";
+  if(piece.bombIndex !== undefined && piece.bombIndex !== -1){
+    const b = piece.shape[piece.bombIndex];
+    bombCoord = b[0] + '_' + b[1];
+  }
+
   for(let r=0; r<rows; r++){
     for(let c=0; c<cols; c++){
       const cellEl = document.createElement('div');
       cellEl.style.width = cellPx + 'px';
       cellEl.style.height = cellPx + 'px';
-      if(filledSet.has(r + '_' + c)){
+      const key = r + '_' + c;
+      if(filledSet.has(key)){
         cellEl.className = 'drag-cell';
         cellEl.style.background = piece.color;
+        if(key === bombCoord){
+          cellEl.textContent = '💣';
+          cellEl.classList.add('bomb-cell');
+          cellEl.style.fontSize = (cellPx * 0.6) + 'px';
+        }
       } else {
         cellEl.style.background = 'transparent';
       }
