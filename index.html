@@ -301,7 +301,7 @@
   }
   .config-row {
     display: flex;
-    gap: 8px;
+    gap: 6px;
     align-items: center;
     margin-bottom: 6px;
   }
@@ -311,9 +311,9 @@
     background: var(--bg);
     border: 1px solid var(--cell-border);
     color: var(--ink);
-    padding: 8px 12px;
+    padding: 8px 10px;
     border-radius: 8px;
-    font-size: 13px;
+    font-size: 12px;
     font-family: inherit;
     pointer-events: none;
     overflow: hidden;
@@ -323,7 +323,7 @@
     background: var(--panel-2);
     border: 1px solid var(--cell-border);
     color: var(--ink);
-    padding: 8px 14px;
+    padding: 8px 10px;
     border-radius: 8px;
     font-size: 12px;
     cursor: pointer;
@@ -340,6 +340,11 @@
   .config-btn.test-btn:hover {
     color: var(--ink);
     border-color: var(--ink);
+  }
+  .config-btn.clear-btn {
+    background: rgba(255, 107, 107, 0.15);
+    border-color: rgba(255, 107, 107, 0.4);
+    color: var(--danger);
   }
 
   /* セグメントコントロール（サイズ選択） */
@@ -363,6 +368,21 @@
   .size-option.active {
     background: var(--panel-2);
     color: var(--gold);
+  }
+
+  /* ---------- 得点ポップアップ表示 ---------- */
+  .score-popup {
+    position: fixed;
+    pointer-events: none;
+    font-weight: 900;
+    z-index: 100;
+    text-shadow: 0 2px 6px rgba(10, 11, 26, 0.95), 0 -1px 1px rgba(255, 255, 255, 0.2);
+    animation: floatUp 0.7s cubic-bezier(0.18, 0.89, 0.32, 1.28) forwards;
+  }
+  @keyframes floatUp {
+    0% { transform: translate(-50%, 0) scale(0.6); opacity: 0; }
+    20% { transform: translate(-50%, -15px) scale(1.2); opacity: 1; }
+    100% { transform: translate(-50%, -55px) scale(1); opacity: 0; }
   }
 
   /* ---------- トースト表示 ---------- */
@@ -507,7 +527,7 @@
 
 <!-- 設定モーダル -->
 <div id="configModal" class="modal-overlay">
-  <div class="card" style="max-width: 380px;">
+  <div class="card" style="max-width: 400px; padding: 24px 20px;">
     <h2>⚙️ ゲーム設定</h2>
     
     <div class="config-section">
@@ -524,6 +544,7 @@
       <div class="config-row">
         <input type="text" id="photoStatus" readonly value="未選択（デフォルト背景）">
         <button class="config-btn" id="photoSelectBtn">選ぶ</button>
+        <button class="config-btn clear-btn" id="photoClearBtn">クリア</button>
       </div>
     </div>
 
@@ -532,6 +553,7 @@
       <div class="config-row">
         <input type="text" id="voiceLineStatus" readonly value="未設定（システム効果音のみ）">
         <button class="config-btn" id="voiceLineSelectBtn">選ぶ</button>
+        <button class="config-btn clear-btn" id="voiceLineClearBtn">クリア</button>
         <button class="config-btn test-btn" id="voiceLineTestBtn">テスト</button>
       </div>
     </div>
@@ -541,11 +563,12 @@
       <div class="config-row">
         <input type="text" id="voiceClearStatus" readonly value="未設定（システム効果音のみ）">
         <button class="config-btn" id="voiceClearSelectBtn">選ぶ</button>
+        <button class="config-btn clear-btn" id="voiceClearClearBtn">クリア</button>
         <button class="config-btn test-btn" id="voiceClearTestBtn">テスト</button>
       </div>
     </div>
 
-    <button class="big-btn" id="configSaveBtn" style="background-color: var(--ok); color: #12142B;">保存して閉じる</button>
+    <button class="big-btn" id="configSaveBtn" style="background-color: var(--ok); color: #12142B; margin-top: 15px;">保存して閉じる</button>
   </div>
 </div>
 
@@ -635,15 +658,18 @@ const sizeOptions = [...document.querySelectorAll('.size-option')];
 
 const photoInput = document.getElementById('photoInput');
 const photoSelectBtn = document.getElementById('photoSelectBtn');
+const photoClearBtn = document.getElementById('photoClearBtn');
 const photoStatus = document.getElementById('photoStatus');
 
 const voiceLineInput = document.getElementById('voiceLineInput');
 const voiceLineSelectBtn = document.getElementById('voiceLineSelectBtn');
+const voiceLineClearBtn = document.getElementById('voiceLineClearBtn');
 const voiceLineStatus = document.getElementById('voiceLineStatus');
 const voiceLineTestBtn = document.getElementById('voiceLineTestBtn');
 
 const voiceClearInput = document.getElementById('voiceClearInput');
 const voiceClearSelectBtn = document.getElementById('voiceClearSelectBtn');
+const voiceClearClearBtn = document.getElementById('voiceClearClearBtn');
 const voiceClearStatus = document.getElementById('voiceClearStatus');
 const voiceClearTestBtn = document.getElementById('voiceClearTestBtn');
 
@@ -666,6 +692,22 @@ function showToast(message) {
   setTimeout(() => {
     toastEl.classList.remove('show');
   }, 2500);
+}
+
+/* ---------------- 得点ポップアップ演出 ---------------- */
+function showScorePopup(x, y, text, isBig = false) {
+  const pop = document.createElement('div');
+  pop.className = 'score-popup';
+  pop.textContent = text;
+  pop.style.left = x + 'px';
+  pop.style.top = y + 'px';
+  pop.style.fontSize = isBig ? '26px' : '18px';
+  pop.style.color = isBig ? 'var(--ok)' : 'var(--gold)';
+  document.body.appendChild(pop);
+  
+  pop.addEventListener('animationend', () => {
+    pop.remove();
+  });
 }
 
 /* ---------------- 設定値（盤面サイズなど）の変更検知 ---------------- */
@@ -712,7 +754,7 @@ configSaveBtn.addEventListener('click', () => {
   }
 });
 
-/* ---------------- 画像アップロード (Blob URL方式によるメモリ対策) ---------------- */
+/* ---------------- 写真アップロード ---------------- */
 photoSelectBtn.addEventListener('click', () => photoInput.click());
 photoInput.addEventListener('change', (e) => {
   const file = e.target.files[0];
@@ -731,6 +773,19 @@ photoInput.addEventListener('change', (e) => {
   showToast("写真を読み込みました");
 });
 
+// 写真のクリア
+photoClearBtn.addEventListener('click', () => {
+  if (currentPhotoObjectUrl) {
+    URL.revokeObjectURL(currentPhotoObjectUrl);
+    currentPhotoObjectUrl = null;
+  }
+  currentBg = DEFAULT_BG;
+  photoStatus.value = "未選択（デフォルト背景）";
+  photoInput.value = "";
+  renderBoard();
+  showToast("写真をクリアしました");
+});
+
 /* ---------------- 音声アップロードと管理 ---------------- */
 voiceLineSelectBtn.addEventListener('click', () => voiceLineInput.click());
 voiceLineInput.addEventListener('change', (e) => {
@@ -741,6 +796,14 @@ voiceLineInput.addEventListener('change', (e) => {
   voiceLineClear.preload = 'auto';
   voiceLineStatus.value = file.name;
   showToast("声1（2列消し）を設定しました");
+});
+
+// 声1のクリア
+voiceLineClearBtn.addEventListener('click', () => {
+  voiceLineClear = null;
+  voiceLineInput.value = "";
+  voiceLineStatus.value = "未設定（システム効果音のみ）";
+  showToast("声1をクリアしました");
 });
 
 voiceClearSelectBtn.addEventListener('click', () => voiceClearInput.click());
@@ -754,15 +817,34 @@ voiceClearInput.addEventListener('change', (e) => {
   showToast("声2（クリア）を設定しました");
 });
 
+// 声2のクリア
+voiceClearClearBtn.addEventListener('click', () => {
+  voiceClear = null;
+  voiceClearInput.value = "";
+  voiceClearStatus.value = "未設定（システム効果音のみ）";
+  showToast("声2をクリアしました");
+});
+
+/* ---------------- 音声の安全な再生処理 ---------------- */
+function playCustomVoice(audioElement) {
+  if (!soundOn || !audioElement) return;
+  try {
+    audioElement.currentTime = 0;
+    audioElement.loop = false; // ループを確実に防止
+    audioElement.play().catch(err => {
+      console.warn("音声の再生が制限されました:", err);
+    });
+  } catch (e) {
+    console.error("音声の再生中にエラーが発生しました:", e);
+  }
+}
+
 /* ---------------- 音声テスト再生 ---------------- */
 voiceLineTestBtn.addEventListener('click', () => {
   ensureAudio();
   if (voiceLineClear) {
     showToast("声1を再生テスト中...");
-    voiceLineClear.currentTime = 0;
-    voiceLineClear.play().catch(err => {
-      showToast("再生に失敗しました: " + err.message);
-    });
+    playCustomVoice(voiceLineClear);
   } else {
     showToast("音声ファイルが未選択です");
   }
@@ -772,10 +854,7 @@ voiceClearTestBtn.addEventListener('click', () => {
   ensureAudio();
   if (voiceClear) {
     showToast("声2を再生テスト中...");
-    voiceClear.currentTime = 0;
-    voiceClear.play().catch(err => {
-      showToast("再生に失敗しました: " + err.message);
-    });
+    playCustomVoice(voiceClear);
   } else {
     showToast("音声ファイルが未選択です");
   }
@@ -791,17 +870,8 @@ function ensureAudio(){
   if(audioCtx && audioCtx.state === 'suspended') {
     audioCtx.resume();
   }
-  // 音声ファイルのWeb Audio経由でのロード保証
-  if (voiceLineClear && voiceLineClear.play) {
-    voiceLineClear.play().then(() => {
-      voiceLineClear.pause();
-    }).catch(() => {});
-  }
-  if (voiceClear && voiceClear.play) {
-    voiceClear.play().then(() => {
-      voiceClear.pause();
-    }).catch(() => {});
-  }
+  // ※【修正】ここで行われていた声ファイルの強制的な再生＆停止を廃止
+  // これにより、ピース選択時に声が一瞬漏れるバグを完全に抑制します。
 }
 
 function toggleSound(){
@@ -836,19 +906,11 @@ function playClearSound(lines){
 }
 
 function playVoiceLineClear(){
-  if(!soundOn || !voiceLineClear) return;
-  voiceLineClear.currentTime = 0;
-  voiceLineClear.play().catch((e) => {
-    console.warn("声1の自動再生が制限されました。テストボタンで確認してください:", e);
-  });
+  playCustomVoice(voiceLineClear);
 }
 
 function playVoiceClear(){
-  if(!soundOn || !voiceClear) return;
-  voiceClear.currentTime = 0;
-  voiceClear.play().catch((e) => {
-    console.warn("声2の自動再生が制限されました。テストボタンで確認してください:", e);
-  });
+  playCustomVoice(voiceClear);
 }
 
 /* ---------------- 爆発エフェクト ---------------- */
@@ -992,7 +1054,6 @@ function shapeBounds(shape){
   return { rows: maxR + 1, cols: maxC + 1 };
 }
 
-// 枠が歪まないように空のマスも実寸サイズを確保するよう修正
 function buildPieceGrid(piece, cellPx){
   const { rows, cols } = shapeBounds(piece.shape);
   const wrap = document.createElement('div');
@@ -1031,7 +1092,15 @@ function placePiece(piece, anchorR, anchorC){
   piece.shape.forEach(([dr, dc]) => {
     board[anchorR + dr][anchorC + dc] = piece.color;
   });
-  score += piece.shape.length;
+  const addedScore = piece.shape.length;
+  score += addedScore;
+
+  // ピース配置時の得点を盤面上にポップアップ表示
+  const targetCell = boardEl.querySelector(`[data-r="${anchorR}"][data-c="${anchorC}"]`);
+  if (targetCell) {
+    const rect = targetCell.getBoundingClientRect();
+    showScorePopup(rect.left + rect.width / 2, rect.top, `+${addedScore}`);
+  }
 }
 
 /* ---------------- ライン消去判定 ---------------- */
@@ -1063,9 +1132,18 @@ function clearLines(){
   fullRows.forEach(r => { for(let c=0; c<GRID; c++) addFlashCell(r, c); });
   fullCols.forEach(c => { for(let r=0; r<GRID; r++) addFlashCell(r, c); });
 
+  // 得点ポップアップ表示の位置計算用に座標を記録
+  let sumX = 0, sumY = 0, count = 0;
+
   cellsToFlash.forEach(([r,c]) => {
     const el = boardEl.querySelector(`[data-r="${r}"][data-c="${c}"]`);
-    if(el) el.classList.add('clearing');
+    if(el) {
+      el.classList.add('clearing');
+      const rect = el.getBoundingClientRect();
+      sumX += (rect.left + rect.width / 2);
+      sumY += (rect.top + rect.height / 2);
+      count++;
+    }
     
     // 安全対策：消去直前のセル色
     const cellColor = board[r] ? board[r][c] : null;
@@ -1083,6 +1161,11 @@ function clearLines(){
 
   const bonus = totalLines * 10 + (totalLines > 1 ? totalLines * 5 : 0);
   score += bonus;
+
+  // 消去時の得点を、消去されたラインの中心にポップアップ表示
+  if (count > 0) {
+    showScorePopup(sumX / count, sumY / count - 15, `+${bonus}`, true);
+  }
 
   setTimeout(() => {
     // 安全なデータクリア
@@ -1160,7 +1243,7 @@ function checkGameOver(){
   }
 }
 
-/* ---------------- ドラッグ操作（位置ズレ＆ワープ完全対策） ---------------- */
+/* ---------------- ドラッグ操作 ---------------- */
 function startDrag(e, slotIndex){
   if(!gameActive) return;
   const piece = tray[slotIndex];
@@ -1196,7 +1279,6 @@ function startDrag(e, slotIndex){
   const slotEl = trayEls[slotIndex];
   slotEl.classList.add('dragging-source');
 
-  // 【ズレ対策のキモ】トレイ内のクリック箇所と、拡大されたドラッグ用プロキシの正確な初期位置オフセットを算出
   const gridEl = slotEl.querySelector('.piece-grid');
   let dragOffsetX = cellPx / 2;
   let dragOffsetY = cellPx / 2;
@@ -1206,8 +1288,6 @@ function startDrag(e, slotIndex){
     const clickX = e.clientX - gridRect.left;
     const clickY = e.clientY - gridRect.top;
 
-    // トレイ用グリッド（セルサイズ18px + 余白3px = 約21px間隔）から
-    // 盤面グリッド（cellPx + 余白4px）へのスケーリング比率を計算
     const ratio = (cellPx + 4) / 21;
     dragOffsetX = clickX * ratio;
     dragOffsetY = clickY * ratio;
@@ -1240,14 +1320,12 @@ function onDragMove(e){
   const lift = dragState.isTouch ? 80 : 10;
   const px = boardCellPx();
 
-  // 指の真下から相対位置（dragOffsetX/Y）を保った位置へ配置
   const left = e.clientX - dragState.dragOffsetX;
   const top = e.clientY - lift - dragState.dragOffsetY;
 
   dragProxy.style.left = left + 'px';
   dragProxy.style.top = top + 'px';
 
-  // 常にピースの「[0,0]のセル」が位置する中心点を算出して基準のマスを検知する
   const checkX = left + (px + 4) / 2;
   const checkY = top + (px + 4) / 2;
 
