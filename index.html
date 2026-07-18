@@ -43,6 +43,7 @@
     min-height: 100vh;
     overscroll-behavior: none;
     touch-action: manipulation;
+    transition: background 0.5s ease;
   }
 
   .app{
@@ -64,6 +65,7 @@
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
+    transition: background 0.5s ease;
   }
 
   .scoreboard{
@@ -79,6 +81,7 @@
     border-radius: 14px;
     padding: 10px 14px;
     text-align: center;
+    transition: border-color 0.5s ease, background-color 0.5s ease;
   }
   .score-box .label{
     font-size: 12px;
@@ -101,6 +104,7 @@
     position: relative;
     touch-action: none;
     margin-bottom: 10px;
+    transition: border-color 0.5s ease, background-color 0.5s ease;
   }
   .cell{
     background: rgb(38,42,82);
@@ -173,6 +177,7 @@
     align-items: center;
     justify-content: center;
     position: relative;
+    transition: border-color 0.5s ease, background-color 0.5s ease;
   }
   .slot.dragging-source{ opacity: .25; }
   .piece-grid{
@@ -481,6 +486,25 @@
     touch-action: pan-y;
   }
   .game-screen.show{ display: flex; }
+
+  /* ---------- フィーバーモード時の演出 ---------- */
+  body.fever-active {
+    background: radial-gradient(120% 120% at 50% -10%, #3e1212 0%, #150505 60%) !important;
+  }
+  body.fever-active #board {
+    border-color: var(--danger);
+    background-color: #240a0a;
+    box-shadow: 0 0 16px rgba(255, 107, 107, 0.35);
+  }
+  body.fever-active .slot {
+    border-color: #FF8C00;
+    background-color: #240a0a;
+    box-shadow: 0 0 10px rgba(255, 140, 0, 0.2);
+  }
+  body.fever-active .score-box {
+    border-color: #FF8C00;
+    background: #240a0a;
+  }
 </style>
 </head>
 <body>
@@ -632,6 +656,7 @@
 let GRID = 7;
 let playMode = 'normal'; // 'normal' または 'gravity'
 let pieceIdCounter = 1;  // グループ落下時に塊ピースを識別するための一意ID
+let feverPhasesLeft = 0; // 残りフィーバーフェーズ数（補充3サイクル分をカウント）
 
 const COLORS = ['var(--c1)','var(--c2)','var(--c3)','var(--c4)','var(--c5)','var(--c6)'];
 
@@ -1308,6 +1333,8 @@ function newGame(){
   score = 0;
   moveCount = 0;
   gameActive = true;
+  feverPhasesLeft = 0; 
+  updateFeverUI();
   if (overlayEl) overlayEl.classList.remove('show');
   if (clearOverlayEl) clearOverlayEl.classList.remove('show');
   refillTray();
@@ -1315,20 +1342,100 @@ function newGame(){
 }
 
 function refillTray(){
-  tray = [randomPiece(), randomPiece(), randomPiece()];
+  const isFever = feverPhasesLeft > 0;
+  tray = [randomPiece(isFever), randomPiece(isFever), randomPiece(isFever)];
+  
+  if (isFever) {
+    feverPhasesLeft--;
+    if (feverPhasesLeft === 0) {
+      setTimeout(() => {
+        showToast("爆弾フィーバーモードが終了しました");
+        updateFeverUI();
+      }, 1000);
+    }
+  }
+  updateFeverUI();
 }
 
-function randomPiece(){
+function randomPiece(forceBomb = false){
   const shape = SHAPES[Math.floor(Math.random() * SHAPES.length)];
   const color = COLORS[Math.floor(Math.random() * COLORS.length)];
   let bombIndex = -1;
   let bombType = null;
 
-  if(Math.random() < 0.05){ // 出現確率 5%
+  if(forceBomb || Math.random() < 0.05){ // フィーバー中なら100%爆弾付きに、通常は5%
     bombIndex = Math.floor(Math.random() * shape.length);
     bombType = Math.random() < 0.30 ? 'red' : 'normal';
   }
   return { shape, color, bombIndex, bombType };
+}
+
+/* ---------------- フィーバーモード演出制御 ---------------- */
+function updateFeverUI() {
+  const body = document.body;
+  const title = document.getElementById('titleEl');
+  if (feverPhasesLeft > 0) {
+    body.classList.add('fever-active');
+    if (title) {
+      title.textContent = `🔥 爆弾フィーバー中！ (あと${feverPhasesLeft}サイクル) 🔥`;
+      title.style.background = 'linear-gradient(90deg, #FF6B6B, #FFC857)';
+      title.style.webkitBackgroundClip = 'text';
+    }
+  } else {
+    body.classList.remove('fever-active');
+    if (title) {
+      title.textContent = `目指せアンバーリバボー!パズル`;
+      title.style.background = 'linear-gradient(90deg, var(--gold), var(--c4))';
+      title.style.webkitBackgroundClip = 'text';
+    }
+  }
+}
+
+function triggerFeverEffects() {
+  if (!soundOn || !audioCtx) return;
+  // フィーバーファンファーレSEの作成
+  const now = audioCtx.currentTime;
+  const freqs = [261.63, 329.63, 392.00, 523.25, 659.25, 783.99]; // ド・ミ・ソ・ド・ミ・ソ
+  freqs.forEach((f, idx) => {
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(f, now + idx * 0.08);
+    gain.gain.setValueAtTime(0.0001, now + idx * 0.08);
+    gain.gain.exponentialRampToValueAtTime(0.12, now + idx * 0.08 + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + idx * 0.08 + 0.25);
+    osc.connect(gain).connect(audioCtx.destination);
+    osc.start(now + idx * 0.08);
+    osc.stop(now + idx * 0.08 + 0.28);
+  });
+
+  // 画面上に大きくFEVERロゴをポップアップ表示
+  const badge = document.createElement('div');
+  badge.style.position = 'fixed';
+  badge.style.top = '40%';
+  badge.style.left = '50%';
+  badge.style.transform = 'translate(-50%, -50%) scale(0.6)';
+  badge.style.color = '#FFC857';
+  badge.style.fontSize = '38px';
+  badge.style.fontWeight = '900';
+  badge.style.textShadow = '0 0 15px #FF6B6B, 0 0 30px #FF0000';
+  badge.style.zIndex = '999';
+  badge.style.pointerEvents = 'none';
+  badge.style.opacity = '0';
+  badge.style.transition = 'all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275)';
+  badge.textContent = '🔥 FEVER START! 🔥';
+  document.body.appendChild(badge);
+
+  requestAnimationFrame(() => {
+    badge.style.transform = 'translate(-50%, -50%) scale(1.2)';
+    badge.style.opacity = '1';
+  });
+
+  setTimeout(() => {
+    badge.style.transform = 'translate(-50%, -50%) scale(1.5)';
+    badge.style.opacity = '0';
+    setTimeout(() => badge.remove(), 500);
+  }, 1300);
 }
 
 /* ---------------- 描画更新 ---------------- */
@@ -1495,6 +1602,14 @@ function clearLines(){
   const totalLines = fullRows.length + fullCols.length;
   if(totalLines === 0) return;
 
+  // 縦列と横列の同時消し（十字消しなど）の検知
+  const isCrossClear = fullRows.length > 0 && fullCols.length > 0;
+  if (isCrossClear) {
+    feverPhasesLeft = 3; // 次の手札補充から3サイクル爆弾フィーバーに突入
+    triggerFeverEffects();
+    showToast("🔥 縦横同時消し！爆弾フィーバー突入 🔥");
+  }
+
   const initialCells = [];
   const clearedKeys = new Set();
   const addInitialCell = (r, c) => {
@@ -1642,6 +1757,57 @@ function checkGameOver(){
     if (finalBestEl) finalBestEl.textContent = 'ベストスコア: ' + best;
     if (overlayEl) overlayEl.classList.add('show');
   }
+}
+
+/* ---------------- クリア判定・演出 ---------------- */
+function isImageFullyRevealed() {
+  for (let r = 0; r < GRID; r++) {
+    for (let c = 0; c < GRID; c++) {
+      if (!revealed[r] || !revealed[r][c]) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+function triggerClear() {
+  if (!gameActive) return;
+  gameActive = false;
+
+  // クリアボーナス（手数が少ないほど高得点）
+  const bonus = Math.max(10, 300 - moveCount * 3);
+  score += bonus;
+  best = Math.max(best, score);
+
+  // 写真表示部分の切り替え
+  if (clearPhotoWrap && clearPhotoImg) {
+    if (currentPhotoObjectUrl) {
+      clearPhotoImg.src = currentPhotoObjectUrl;
+      clearPhotoImg.style.background = 'none';
+      clearPhotoWrap.style.display = 'block';
+    } else {
+      // デフォルト背景の場合
+      clearPhotoImg.removeAttribute('src');
+      clearPhotoImg.style.background = currentBg;
+      clearPhotoWrap.style.display = 'block';
+    }
+  }
+
+  // スコア等の表示更新
+  const clearScoreEl = document.getElementById('clearScore');
+  const clearBonusLineEl = document.getElementById('clearBonusLine');
+  const clearBestEl = document.getElementById('clearBest');
+
+  if (clearScoreEl) clearScoreEl.textContent = score;
+  if (clearBonusLineEl) clearBonusLineEl.textContent = `ボーナス: +${bonus}点（${moveCount}手）`;
+  if (clearBestEl) clearBestEl.textContent = 'ベストスコア: ' + best;
+
+  if (clearOverlayEl) {
+    clearOverlayEl.classList.add('show');
+  }
+
+  playVoiceClear();
 }
 
 /* ---------------- ドラッグ操作 ---------------- */
@@ -1821,7 +1987,7 @@ function applyGridCSS() {
   document.documentElement.style.setProperty('--cell', cellSize);
 }
 
-/* ---------------- トップ画面 / ゲーム画面 切り替え制御 ---------------- */
+/* ---------------- トップ画面 / ゲーム画面 ---------- */
 function showTopScreen(){
   if (titleEl) titleEl.style.display = '';
   if (topScreenEl) topScreenEl.classList.remove('hide');
@@ -1870,6 +2036,29 @@ if (clearTopBtn) {
   clearTopBtn.addEventListener('click', () => {
     if (clearOverlayEl) clearOverlayEl.classList.remove('show');
     showTopScreen();
+  });
+}
+
+const retryBtn = document.getElementById('retryBtn');
+if (retryBtn) {
+  retryBtn.addEventListener('click', () => {
+    newGame();
+  });
+}
+
+const clearRetryBtn = document.getElementById('clearRetryBtn');
+if (clearRetryBtn) {
+  clearRetryBtn.addEventListener('click', () => {
+    newGame();
+  });
+}
+
+const resetBtn = document.getElementById('resetBtn');
+if (resetBtn) {
+  resetBtn.addEventListener('click', () => {
+    if (confirm("ゲームをリセットして新しく開始しますか？")) {
+      newGame();
+    }
   });
 }
 
