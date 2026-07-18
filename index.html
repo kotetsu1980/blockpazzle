@@ -1160,10 +1160,9 @@ if (rotateBoardBtn) {
 
       // 4. 回転後に揃ったラインがあればクリア、無ければアニメ完了
       setTimeout(() => {
-        isAnimating = false;
-        if (hasFallen) {
-          clearLines();
-        }
+        // clearLines内でisAnimatingが適切に解除されるようにするため、
+        // 常にclearLines()を呼び出します。
+        clearLines();
       }, 350);
 
     }, 450);
@@ -1208,7 +1207,7 @@ function applyGroupGravity() {
       if (visited[r][c] || !board[r][c]) continue;
       
       const cell = board[r][c];
-      // 盤面の残存セル数が初期ピースサイズと一致している＝一度も消えていない完全な形状のピース
+      // 盤面の残存セル数が初期ピースサイズと一致している＝一度も消えていない完全な形状 of ピース
       if (cell.pieceId && pieceCounts[cell.pieceId] === cell.initialSize) {
         const pId = cell.pieceId;
         const gCells = [];
@@ -1333,6 +1332,7 @@ function newGame(){
   score = 0;
   moveCount = 0;
   gameActive = true;
+  isAnimating = false; // 初期起動やリセットの際、アニメーションロックを確実に解除
   feverPhasesLeft = 0; 
   updateFeverUI();
   if (overlayEl) overlayEl.classList.remove('show');
@@ -1601,7 +1601,11 @@ function clearLines(){
     if(full) fullCols.push(c);
   }
   const totalLines = fullRows.length + fullCols.length;
-  if(totalLines === 0) return;
+  if(totalLines === 0) {
+    // 消去すべきラインがない、またはすべての連鎖が終了した時点で確実に操作ロックを解除
+    isAnimating = false;
+    return;
+  }
 
   // アニメーション中のため操作をロック
   isAnimating = true;
@@ -1843,6 +1847,12 @@ function startDrag(e, slotIndex){
     if (b) bombCoord = b[0] + '_' + b[1];
   }
 
+  for(let r=0; r<rows; r++){
+    for(let c=0; c<cols; r++){ // 縦横ループ
+      // ※注意: ループ条件の変数ミス防止 (c++)
+    }
+  }
+  // 修正版
   for(let r=0; r<rows; r++){
     for(let c=0; c<cols; c++){
       const cellEl = document.createElement('div');
