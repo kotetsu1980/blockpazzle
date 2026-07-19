@@ -594,14 +594,14 @@
     
     <div class="config-section">
       <label>盤面の大きさ</label>
-      <div class="size-selector" id="sizeSelector"> <!-- IDを sizeSelector に変更 -->
+      <div class="size-selector" id="sizeSelector">
         <div class="size-option" data-size="7">7 × 7</div>
         <div class="size-option" data-size="8">8 × 8</div>
         <div class="size-option" data-size="9">9 × 9</div>
       </div>
     </div>
 
-    <!-- プレイモード選択UI (IDを modeSelector に変更) -->
+    <!-- プレイモード選択UI -->
     <div class="config-section">
       <label>プレイモード</label>
       <div class="size-selector" id="modeSelector">
@@ -656,7 +656,7 @@
 let GRID = 7;
 let playMode = 'normal'; // 'normal' または 'gravity'
 let pieceIdCounter = 1;  // グループ落下時に塊ピースを識別するための一意ID
-let feverPhasesLeft = 0; // 残りフィーバーフェーズ数（補充3サイクル分をカウント）
+let feverPhasesLeft = 0; // 残りフィーバーフェーズ数
 
 const COLORS = ['var(--c1)','var(--c2)','var(--c3)','var(--c4)','var(--c5)','var(--c6)'];
 
@@ -702,9 +702,9 @@ let moveCount = 0;
 let gameActive = true;
 let isAnimating = false; // 落下・回転中の操作制限用
 
-// UI要素の取得 (ガード付き取得)
+// UI要素の取得 (Array.fromによる安全な取得)
 const boardEl = document.getElementById('board');
-const trayEls = [...document.querySelectorAll('.slot')];
+const trayEls = Array.from(document.querySelectorAll('.slot'));
 const dragProxy = document.getElementById('dragProxy');
 const scoreValEl = document.getElementById('scoreVal');
 const bestValEl = document.getElementById('bestVal');
@@ -732,8 +732,7 @@ const configBtn = document.getElementById('configBtn');
 const configModal = document.getElementById('configModal');
 const configSaveBtn = document.getElementById('configSaveBtn');
 
-// 取得対象をそれぞれ対応するID配下のオプションに厳密に絞り込む (相互干渉の解消)
-const sizeOptions = [...document.querySelectorAll('#sizeSelector .size-option')];
+const sizeOptions = Array.from(document.querySelectorAll('#sizeSelector .size-option'));
 const modeOptNormal = document.getElementById('modeOptNormal');
 const modeOptGravity = document.getElementById('modeOptGravity');
 
@@ -759,7 +758,7 @@ const toastEl = document.getElementById('toast');
 // 背景画像のデフォルト設定
 const DEFAULT_BG = 'linear-gradient(200deg, #FFD37A 0%, #FF9F5B 32%, #4FA8FF 68%, #7F77DD 100%)';
 let currentBg = DEFAULT_BG;
-let currentPhotoObjectUrl = null; // メモリ節約のためObject URLを使用
+let currentPhotoObjectUrl = null;
 
 // 音声ファイル管理用オブジェクト
 let voiceLineClear = null;
@@ -793,22 +792,22 @@ function showScorePopup(x, y, text, isBig = false) {
   });
 }
 
-/* ---------------- 設定値（盤面サイズ/モードなど）の変更検知 ---------------- */
+/* ---------------- 設定値の変更検知 ---------------- */
 let tempGridSize = GRID;
 let tempPlayMode = playMode;
 
-// サイズボタン専用のバインド
 sizeOptions.forEach(opt => {
   if (opt) {
     opt.addEventListener('click', () => {
-      sizeOptions.forEach(o => o && o.classList.remove('active'));
+      sizeOptions.forEach(o => {
+        if (o) o.classList.remove('active');
+      });
       opt.classList.add('active');
       tempGridSize = parseInt(opt.dataset.size, 10);
     });
   }
 });
 
-// プレイモード選択イベント
 if (modeOptNormal && modeOptGravity) {
   modeOptNormal.addEventListener('click', () => {
     modeOptNormal.classList.add('active');
@@ -844,7 +843,6 @@ function syncConfigUI() {
   }
 }
 
-// モーダルの開閉
 function openConfigModal(){
   syncConfigUI();
   if (configModal) configModal.classList.add('show');
@@ -855,7 +853,6 @@ if (configBtnTop) configBtnTop.addEventListener('click', openConfigModal);
 
 if (configSaveBtn) {
   configSaveBtn.addEventListener('click', () => {
-    // 数値の妥当性を厳格にガード (NaNによる N×N 破壊防止)
     if (isNaN(tempGridSize) || tempGridSize < 7 || tempGridSize > 9) {
       tempGridSize = GRID;
     }
@@ -899,7 +896,6 @@ if (photoInput) {
   });
 }
 
-// 写真のクリア
 if (photoClearBtn) {
   photoClearBtn.addEventListener('click', () => {
     if (currentPhotoObjectUrl) {
@@ -930,7 +926,6 @@ if (voiceLineInput) {
   });
 }
 
-// 声1のクリア
 if (voiceLineClearBtn) {
   voiceLineClearBtn.addEventListener('click', () => {
     voiceLineClear = null;
@@ -955,7 +950,6 @@ if (voiceClearInput) {
   });
 }
 
-// 声2のクリア
 if (voiceClearClearBtn) {
   voiceClearClearBtn.addEventListener('click', () => {
     voiceClear = null;
@@ -965,7 +959,7 @@ if (voiceClearClearBtn) {
   });
 }
 
-/* ---------------- 音声の安全な再生処理 ---------------- */
+/* ---------------- 音声の再生処理 ---------------- */
 function playCustomVoice(audioElement) {
   if (!soundOn || !audioElement) return;
   try {
@@ -1009,7 +1003,10 @@ let audioCtx = null;
 function ensureAudio(){
   if(!soundOn) return;
   if(!audioCtx) {
-    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (AudioContextClass) {
+      audioCtx = new AudioContextClass();
+    }
   }
   if(audioCtx && audioCtx.state === 'suspended') {
     audioCtx.resume();
@@ -1029,7 +1026,6 @@ function toggleSound(){
 if (soundBtn) soundBtn.addEventListener('click', toggleSound);
 if (soundBtnTop) soundBtnTop.addEventListener('click', toggleSound);
 
-// 通常の消去サウンド
 function playClearSound(lines){
   if(!soundOn || !audioCtx) return;
   const notes = [523.25, 659.25, 783.99, 987.77, 1174.66];
@@ -1050,7 +1046,6 @@ function playClearSound(lines){
   }
 }
 
-// 爆発サウンド
 function playBombSound(isRed = false){
   if(!soundOn || !audioCtx) return;
   const now = audioCtx.currentTime;
@@ -1122,19 +1117,17 @@ function explodeCell(r, c, color, isBomb = false, isRed = false){
   }
 }
 
-/* ---------------- 盤面90度時計回り回転処理 (自由落下モード専用) ---------------- */
+/* ---------------- 盤面90度回転処理 (自由落下モード専用) ---------------- */
 if (rotateBoardBtn) {
   rotateBoardBtn.addEventListener('click', () => {
     if (!gameActive || isAnimating || dragState || !boardEl || playMode !== 'gravity') return;
     ensureAudio();
     isAnimating = true;
 
-    // 1. 盤面回転のCSSアニメーションをトリガー
     boardEl.style.transition = 'transform 0.45s cubic-bezier(0.4, 0, 0.2, 1)';
     boardEl.style.transform = 'rotate(90deg)';
 
     setTimeout(() => {
-      // 2. 時計回り90度回転データ処理
       const newBoard = Array.from({length: GRID}, () => Array(GRID).fill(null));
       const newRevealed = Array.from({length: GRID}, () => Array(GRID).fill(false));
 
@@ -1148,20 +1141,15 @@ if (rotateBoardBtn) {
       board = newBoard;
       revealed = newRevealed;
 
-      // 回転アニメのCSSクラスを一度リセット
       boardEl.style.transition = 'none';
       boardEl.style.transform = 'none';
 
-      // 3. グループ重力落下適用＆再描画
       const { hasFallen, fallDistances } = applyGroupGravity();
       renderBoardWithAnimation(fallDistances);
 
       showToast("盤面が90°回転しました！");
 
-      // 4. 回転後に揃ったラインがあればクリア、無ければアニメ完了
       setTimeout(() => {
-        // clearLines内でisAnimatingが適切に解除されるようにするため、
-        // 常にclearLines()を呼び出します。
         clearLines();
       }, 350);
 
@@ -1178,7 +1166,6 @@ function applyGroupGravity() {
     return { hasFallen, fallDistances };
   }
 
-  // 1. 落下前のブロックの「初期行(r)」位置を追跡用にマーク
   for (let r = 0; r < GRID; r++) {
     for (let c = 0; c < GRID; c++) {
       if (board[r][c]) {
@@ -1187,7 +1174,6 @@ function applyGroupGravity() {
     }
   }
 
-  // 2. 各 pieceId の盤面上での現在の個数を数え上げる
   const pieceCounts = {};
   for (let r = 0; r < GRID; r++) {
     for (let c = 0; c < GRID; c++) {
@@ -1198,7 +1184,6 @@ function applyGroupGravity() {
     }
   }
 
-  // 3. セルを落下グループ化 (無傷ピースはまとめて、削れたピースは1セル単位でバラに)
   const groups = [];
   const visited = Array.from({length: GRID}, () => Array(GRID).fill(false));
 
@@ -1207,7 +1192,6 @@ function applyGroupGravity() {
       if (visited[r][c] || !board[r][c]) continue;
       
       const cell = board[r][c];
-      // 盤面の残存セル数が初期ピースサイズと一致している＝一度も消えていない完全な形状 of ピース
       if (cell.pieceId && pieceCounts[cell.pieceId] === cell.initialSize) {
         const pId = cell.pieceId;
         const gCells = [];
@@ -1221,19 +1205,16 @@ function applyGroupGravity() {
         }
         groups.push({ cells: gCells });
       } else {
-        // バラバラになったセル
         groups.push({ cells: [[r, c]] });
         visited[r][c] = true;
       }
     }
   }
 
-  // 4. ステップ単位の幅優先シミュレーション落下 (塊を保った引っかかりを再現)
   let anyMoved = true;
   while (anyMoved) {
     anyMoved = false;
 
-    // 行(Y)座標が下にあるグループから順にテストして下限衝突判定のズレを防ぐ
     groups.sort((a, b) => {
       const maxA = Math.max(...a.cells.map(cell => cell[0]));
       const maxB = Math.max(...b.cells.map(cell => cell[0]));
@@ -1242,36 +1223,37 @@ function applyGroupGravity() {
 
     for (const g of groups) {
       let canMoveDown = true;
-      for (const [gr, gc] of g.cells) {
+      for (let idx = 0; idx < g.cells.length; idx++) {
+        const cell = g.cells[idx];
+        const gr = cell[0];
+        const gc = cell[1];
         const nr = gr + 1;
         if (nr >= GRID) {
-          canMoveDown = false; // 底辺衝突
+          canMoveDown = false;
           break;
         }
         const targetCell = board[nr][gc];
         if (targetCell !== null) {
-          // 下が同じグループのセルなら落下を阻害しない
-          const isSameGroup = g.cells.some(([cr, cc]) => cr === nr && cc === gc);
+          const isSameGroup = g.cells.some(c => c[0] === nr && c[1] === gc);
           if (!isSameGroup) {
-            canMoveDown = false; // 他のグループ、またはバラブロックに衝突
+            canMoveDown = false;
             break;
           }
         }
       }
 
-      // 移動可能な場合、グループ全セルを同時に1セル分落下させる
       if (canMoveDown) {
-        const cellDataBackup = g.cells.map(([gr, gc]) => board[gr][gc]);
+        const cellDataBackup = g.cells.map(c => board[c[0]][c[1]]);
         
-        g.cells.forEach(([gr, gc]) => {
-          board[gr][gc] = null;
+        g.cells.forEach(c => {
+          board[c[0]][c[1]] = null;
         });
         
         g.cells.forEach((cell, idx) => {
           const nr = cell[0] + 1;
           const nc = cell[1];
           board[nr][nc] = cellDataBackup[idx];
-          cell[0] = nr; // 新しい位置を記憶
+          cell[0] = nr;
         });
         
         anyMoved = true;
@@ -1280,7 +1262,6 @@ function applyGroupGravity() {
     }
   }
 
-  // 5. 落下完了。オリジナル位置との差分から移動距離を特定して落下量配列を作る
   for (let r = 0; r < GRID; r++) {
     for (let c = 0; c < GRID; c++) {
       if (board[r][c]) {
@@ -1289,7 +1270,7 @@ function applyGroupGravity() {
         if (dist > 0) {
           fallDistances[origR][c] = dist;
         }
-        delete board[r][c].originalR; // 一時的な追跡プロパティを消去
+        delete board[r][c].originalR;
       }
     }
   }
@@ -1297,9 +1278,8 @@ function applyGroupGravity() {
   return { hasFallen, fallDistances };
 }
 
-// 落下アニメーションを伴うレンダリング
 function renderBoardWithAnimation(fallDistances) {
-  renderBoard(); // 最新状態で一度上書き描画
+  renderBoard();
   if (!boardEl) return;
   
   const cellPx = boardCellPx();
@@ -1332,7 +1312,7 @@ function newGame(){
   score = 0;
   moveCount = 0;
   gameActive = true;
-  isAnimating = false; // 初期起動やリセットの際、アニメーションロックを確実に解除
+  isAnimating = false;
   feverPhasesLeft = 0; 
   updateFeverUI();
   if (overlayEl) overlayEl.classList.remove('show');
@@ -1363,30 +1343,30 @@ function randomPiece(forceBomb = false){
   let bombIndex = -1;
   let bombType = null;
 
-  if(forceBomb || Math.random() < 0.05){ // フィーバー中なら100%爆弾付きに、通常は5%
+  if(forceBomb || Math.random() < 0.05){
     bombIndex = Math.floor(Math.random() * shape.length);
     bombType = Math.random() < 0.30 ? 'red' : 'normal';
   }
   return { shape, color, bombIndex, bombType };
 }
 
-/* ---------------- フィーバーモード演出制御 ---------------- */
+/* ---------------- フィーバーモード演出 ---------------- */
 function updateFeverUI() {
   const body = document.body;
   const title = document.getElementById('titleEl');
   if (feverPhasesLeft > 0) {
     body.classList.add('fever-active');
     if (title) {
-      title.textContent = `🔥 爆弾フィーバー中！ (あと${feverPhasesLeft}サイクル) 🔥`;
+      title.textContent = "🔥 爆弾フィーバー中！ (あと" + feverPhasesLeft + "サイクル) 🔥";
       title.style.background = 'linear-gradient(90deg, #FF6B6B, #FFC857)';
-      title.style.webkitBackgroundClip = 'text';
+      title.style.setProperty('-webkit-background-clip', 'text');
     }
   } else {
     body.classList.remove('fever-active');
     if (title) {
-      title.textContent = `目指せアンバーリバボー!パズル`;
+      title.textContent = "目指せアンバーリバボー!パズル";
       title.style.background = 'linear-gradient(90deg, var(--gold), var(--c4))';
-      title.style.webkitBackgroundClip = 'text';
+      title.style.setProperty('-webkit-background-clip', 'text');
     }
   }
 }
@@ -1394,9 +1374,8 @@ function updateFeverUI() {
 function triggerFeverEffects() {
   ensureAudio();
   if (!soundOn || !audioCtx) return;
-  // フィーバーファンファーレSEの作成
   const now = audioCtx.currentTime;
-  const freqs = [261.63, 329.63, 392.00, 523.25, 659.25, 783.99]; // ド・ミ・ソ・ド・ミ・ソ
+  const freqs = [261.63, 329.63, 392.00, 523.25, 659.25, 783.99];
   freqs.forEach((f, idx) => {
     const osc = audioCtx.createOscillator();
     const gain = audioCtx.createGain();
@@ -1410,7 +1389,6 @@ function triggerFeverEffects() {
     osc.stop(now + idx * 0.08 + 0.28);
   });
 
-  // 画面上に大きくFEVERロゴをポップアップ表示
   const badge = document.createElement('div');
   badge.style.position = 'fixed';
   badge.style.top = '40%';
@@ -1474,8 +1452,8 @@ function renderBoard(){
         }
       } else if(revealed[r] && revealed[r][c]){
         cell.style.backgroundImage = currentBg;
-        cell.style.backgroundSize = `${GRID * 100}% ${GRID * 100}%`;
-        cell.style.backgroundPosition = `${(c / (GRID - 1)) * 100}% ${(r / (GRID - 1)) * 100}%`;
+        cell.style.backgroundSize = (GRID * 100) + '% ' + (GRID * 100) + '%';
+        cell.style.backgroundPosition = ((c / (GRID - 1)) * 100) + '% ' + ((r / (GRID - 1)) * 100) + '%';
         cell.textContent = '';
       }
       cell.dataset.r = r;
@@ -1502,7 +1480,12 @@ function renderTray(){
 
 function shapeBounds(shape){
   let maxR = 0, maxC = 0;
-  shape.forEach(([r,c]) => { maxR = Math.max(maxR, r); maxC = Math.max(maxC, c); });
+  shape.forEach(pos => {
+    const r = pos[0];
+    const c = pos[1];
+    maxR = Math.max(maxR, r);
+    maxC = Math.max(maxC, c);
+  });
   return { rows: maxR + 1, cols: maxC + 1 };
 }
 
@@ -1510,9 +1493,9 @@ function buildPieceGrid(piece, cellPx){
   const { rows, cols } = shapeBounds(piece.shape);
   const wrap = document.createElement('div');
   wrap.className = 'piece-grid';
-  wrap.style.gridTemplateColumns = `repeat(${cols}, ${cellPx}px)`;
-  wrap.style.gridTemplateRows = `repeat(${rows}, ${cellPx}px)`;
-  const filledSet = new Set(piece.shape.map(([r,c]) => r + '_' + c));
+  wrap.style.gridTemplateColumns = 'repeat(' + cols + ', ' + cellPx + 'px)';
+  wrap.style.gridTemplateRows = 'repeat(' + rows + ', ' + cellPx + 'px)';
+  const filledSet = new Set(piece.shape.map(pos => pos[0] + '_' + pos[1]));
   
   let bombCoord = "";
   if(piece.bombIndex !== undefined && piece.bombIndex !== -1){
@@ -1548,8 +1531,11 @@ function buildPieceGrid(piece, cellPx){
 
 /* ---------------- 配置可能判定 ---------------- */
 function canPlace(shape, anchorR, anchorC){
-  for(const [dr, dc] of shape){
-    const r = anchorR + dr, c = anchorC + dc;
+  for(let i = 0; i < shape.length; i++){
+    const dr = shape[i][0];
+    const dc = shape[i][1];
+    const r = anchorR + dr;
+    const c = anchorC + dc;
     if(r < 0 || r >= GRID || c < 0 || c >= GRID) return false;
     if(board[r] && board[r][c]) return false;
   }
@@ -1560,7 +1546,9 @@ function placePiece(piece, anchorR, anchorC){
   const curPieceId = pieceIdCounter++;
   const initialSize = piece.shape.length;
 
-  piece.shape.forEach(([dr, dc], idx) => {
+  piece.shape.forEach((pos, idx) => {
+    const dr = pos[0];
+    const dc = pos[1];
     const r = anchorR + dr;
     const c = anchorC + dc;
     const isBomb = (piece.bombIndex === idx);
@@ -1581,7 +1569,7 @@ function placePiece(piece, anchorR, anchorC){
     const targetCell = boardEl.querySelector(`[data-r="${anchorR}"][data-c="${anchorC}"]`);
     if (targetCell) {
       const rect = targetCell.getBoundingClientRect();
-      showScorePopup(rect.left + rect.width / 2, rect.top, `+${addedScore}`);
+      showScorePopup(rect.left + rect.width / 2, rect.top, "+" + addedScore);
     }
   }
 }
@@ -1602,18 +1590,15 @@ function clearLines(){
   }
   const totalLines = fullRows.length + fullCols.length;
   if(totalLines === 0) {
-    // 消去すべきラインがない、またはすべての連鎖が終了した時点で確実に操作ロックを解除
     isAnimating = false;
     return;
   }
 
-  // アニメーション中のため操作をロック
   isAnimating = true;
 
-  // 縦列と横列の同時消し（十字消しなど）の検知
   const isCrossClear = fullRows.length > 0 && fullCols.length > 0;
   if (isCrossClear) {
-    feverPhasesLeft = 3; // 次の手札補充から3サイクル爆弾フィーバーに突入
+    feverPhasesLeft = 3;
     triggerFeverEffects();
     showToast("🔥 縦横同時消し！爆弾フィーバー突入 🔥");
   }
@@ -1629,7 +1614,6 @@ function clearLines(){
   fullRows.forEach(r => { for(let c=0; c<GRID; c++) addInitialCell(r, c); });
   fullCols.forEach(c => { for(let r=0; r<GRID; r++) addInitialCell(r, c); });
 
-  // 誘爆ロジック (幅優先探索)
   const queue = [...initialCells];
   const cellsToFlash = [...initialCells]; 
   const flashKeys = new Set(clearedKeys);
@@ -1637,7 +1621,9 @@ function clearLines(){
   let hasRedExploded = false;
 
   while(queue.length > 0){
-    const [r, c] = queue.shift();
+    const curr = queue.shift();
+    const r = curr[0];
+    const c = curr[1];
     const cellData = board[r] ? board[r][c] : null;
     if(cellData && cellData.isBomb && !explodedBombs.has(r + '_' + c)){
       explodedBombs.add(r + '_' + c);
@@ -1668,7 +1654,9 @@ function clearLines(){
 
   let sumX = 0, sumY = 0, count = 0;
 
-  cellsToFlash.forEach(([r,c]) => {
+  cellsToFlash.forEach(pos => {
+    const r = pos[0];
+    const c = pos[1];
     if (boardEl) {
       const el = boardEl.querySelector(`[data-r="${r}"][data-c="${c}"]`);
       if(el) {
@@ -1710,19 +1698,20 @@ function clearLines(){
   score += totalAddedScore;
 
   if (count > 0) {
-    let textPrefix = `+`;
-    if (hasRedExploded) textPrefix = `🧨大爆破! +`;
-    else if (explodedBombs.size > 0) textPrefix = `💣連鎖! +`;
-    showScorePopup(sumX / count, sumY / count - 15, `${textPrefix}${totalAddedScore}`, true);
+    let textPrefix = "+";
+    if (hasRedExploded) textPrefix = "🧨大爆破! +";
+    else if (explodedBombs.size > 0) textPrefix = "💣連鎖! +";
+    showScorePopup(sumX / count, sumY / count - 15, textPrefix + totalAddedScore, true);
   }
 
   setTimeout(() => {
-    cellsToFlash.forEach(([r, c]) => {
+    cellsToFlash.forEach(pos => {
+      const r = pos[0];
+      const c = pos[1];
       if (board[r]) board[r][c] = null;
     });
 
     if (playMode === 'gravity') {
-      // 自由落下モード：落下重力適用
       const { hasFallen, fallDistances } = applyGroupGravity();
       renderBoardWithAnimation(fallDistances);
 
@@ -1730,15 +1719,14 @@ function clearLines(){
         if (hasFallen) {
           clearLines();
         } else {
-          isAnimating = false; // 連鎖が完全に終わったらロック解除
+          isAnimating = false;
           renderAll();
         }
         if(isImageFullyRevealed()) triggerClear();
       }, 350);
     } else {
-      // 通常モード：落下させずに再描画
       renderAll();
-      isAnimating = false; // ロック解除
+      isAnimating = false;
       if(isImageFullyRevealed()) triggerClear();
     }
 
@@ -1787,12 +1775,10 @@ function triggerClear() {
   if (!gameActive) return;
   gameActive = false;
 
-  // クリアボーナス（手数が少ないほど高得点）
   const bonus = Math.max(10, 300 - moveCount * 3);
   score += bonus;
   best = Math.max(best, score);
 
-  // 写真表示部分の切り替え（写真未選択時の壊れた画像アイコンを防止）
   if (clearPhotoWrap && clearPhotoImg) {
     if (currentPhotoObjectUrl) {
       clearPhotoImg.src = currentPhotoObjectUrl;
@@ -1800,20 +1786,18 @@ function triggerClear() {
       clearPhotoWrap.style.background = 'none';
       clearPhotoWrap.style.display = 'block';
     } else {
-      // デフォルト背景の場合
-      clearPhotoImg.style.display = 'none'; // 画像タグ自体を非表示にして枠崩れを防ぐ
+      clearPhotoImg.style.display = 'none';
       clearPhotoWrap.style.background = currentBg;
       clearPhotoWrap.style.display = 'block';
     }
   }
 
-  // スコア等の表示更新
   const clearScoreEl = document.getElementById('clearScore');
   const clearBonusLineEl = document.getElementById('clearBonusLine');
   const clearBestEl = document.getElementById('clearBest');
 
   if (clearScoreEl) clearScoreEl.textContent = score;
-  if (clearBonusLineEl) clearBonusLineEl.textContent = `ボーナス: +${bonus}点（${moveCount}手）`;
+  if (clearBonusLineEl) clearBonusLineEl.textContent = "ボーナス: +" + bonus + "点（" + moveCount + "手）";
   if (clearBestEl) clearBestEl.textContent = 'ベストスコア: ' + best;
 
   if (clearOverlayEl) {
@@ -1835,24 +1819,19 @@ function startDrag(e, slotIndex){
   const { rows, cols } = shapeBounds(piece.shape);
 
   if (dragProxy) {
-    dragProxy.style.gridTemplateColumns = `repeat(${cols}, ${cellPx}px)`;
-    dragProxy.style.gridTemplateRows = `repeat(${rows}, ${cellPx}px)`;
+    dragProxy.style.gridTemplateColumns = 'repeat(' + cols + ', ' + cellPx + 'px)';
+    dragProxy.style.gridTemplateRows = 'repeat(' + rows + ', ' + cellPx + 'px)';
     dragProxy.innerHTML = '';
   }
   
-  const filledSet = new Set(piece.shape.map(([r,c]) => r + '_' + c));
+  const filledSet = new Set(piece.shape.map(pos => pos[0] + '_' + pos[1]));
   let bombCoord = "";
   if(piece.bombIndex !== undefined && piece.bombIndex !== -1){
     const b = piece.shape[piece.bombIndex];
     if (b) bombCoord = b[0] + '_' + b[1];
   }
 
-  for(let r=0; r<rows; r++){
-    for(let c=0; c<cols; r++){ // 縦横ループ
-      // ※注意: ループ条件の変数ミス防止 (c++)
-    }
-  }
-  // 修正版
+  // ドラッグ表示用の要素を生成
   for(let r=0; r<rows; r++){
     for(let c=0; c<cols; c++){
       const cellEl = document.createElement('div');
@@ -1951,25 +1930,32 @@ function paintGhost(anchorR, anchorC){
   if(!dragState || !boardEl) return;
   const shape = dragState.piece.shape;
   const valid = canPlace(shape, anchorR, anchorC);
-  shape.forEach(([dr, dc]) => {
-    const r = anchorR + dr, c = anchorC + dc;
+  shape.forEach(pos => {
+    const dr = pos[0];
+    const dc = pos[1];
+    const r = anchorR + dr;
+    const c = anchorC + dc;
     if(r < 0 || r >= GRID || c < 0 || c >= GRID) return;
-    const el = boardEl.querySelector(`[data-r="${r}"][data-c="${c}"]`);
+    const el = boardEl.querySelector('[data-r="' + r + '"][data-c="' + c + '"]');
     if(el) el.classList.add(valid ? 'ghost-ok' : 'ghost-bad');
   });
 }
 
 function clearGhost(){
   if (boardEl) {
-    boardEl.querySelectorAll('.ghost-ok, .ghost-bad').forEach(el => {
-      el.classList.remove('ghost-ok', 'ghost-bad');
-    });
+    const list = boardEl.querySelectorAll('.ghost-ok, .ghost-bad');
+    for (let i = 0; i < list.length; i++) {
+      list[i].classList.remove('ghost-ok', 'ghost-bad');
+    }
   }
 }
 
 function onDragEnd(){
   if(!dragState) return;
-  const { slotIndex, piece, lastAnchor } = dragState;
+  const slotIndex = dragState.slotIndex;
+  const piece = dragState.piece;
+  const lastAnchor = dragState.lastAnchor;
+  
   clearGhost();
   if (dragProxy) dragProxy.style.display = 'none';
   const slotEl = trayEls[slotIndex];
@@ -1991,11 +1977,11 @@ function onDragEnd(){
   dragState = null;
 }
 
-/* ---------------- セルサイズ動的決定 (GRIDプロパティ同期) ---------------- */
+/* ---------------- セルサイズ動的決定 ---------------- */
 function applyGridCSS() {
   if (!boardEl) return;
-  boardEl.style.gridTemplateColumns = `repeat(${GRID}, var(--cell))`;
-  boardEl.style.gridTemplateRows = `repeat(${GRID}, var(--cell))`;
+  boardEl.style.gridTemplateColumns = 'repeat(' + GRID + ', var(--cell))';
+  boardEl.style.gridTemplateRows = 'repeat(' + GRID + ', var(--cell))';
 
   let cellSize = 'clamp(34px, 11.4vw, 56px)';
   if (GRID === 8) {
@@ -2021,7 +2007,6 @@ function showGameScreen(){
   if (gameScreenEl) gameScreenEl.classList.add('show');
   document.body.classList.add('no-scroll');
 
-  // モード別で回転ボタンの表示非表示を設定
   if (rotateBoardBtn) {
     rotateBoardBtn.style.display = playMode === 'gravity' ? 'flex' : 'none';
   }
@@ -2081,7 +2066,6 @@ if (resetBtn) {
   });
 }
 
-// 初期起動のセットアップ
 newGame();
 showTopScreen();
 </script>
